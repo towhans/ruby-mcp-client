@@ -1,3 +1,5 @@
+# frozen_string_literal: true
+
 require 'spec_helper'
 
 RSpec.describe MCP::ServerSSE do
@@ -146,7 +148,9 @@ RSpec.describe MCP::ServerSSE do
         )
         .to_return(status: 500, body: 'Server Error')
 
-      expect { server.call_tool(tool_name, parameters) }.to raise_error(MCP::Errors::ToolCallError, /Error calling tool/)
+      expect do
+        server.call_tool(tool_name, parameters)
+      end.to raise_error(MCP::Errors::ToolCallError, /Error calling tool/)
     end
 
     it 'raises TransportError on invalid JSON' do
@@ -161,12 +165,16 @@ RSpec.describe MCP::ServerSSE do
           headers: { 'Content-Type' => 'application/json' }
         )
 
-      expect { server.call_tool(tool_name, parameters) }.to raise_error(MCP::Errors::TransportError, /Invalid JSON response/)
+      expect do
+        server.call_tool(tool_name, parameters)
+      end.to raise_error(MCP::Errors::TransportError, /Invalid JSON response/)
     end
 
     it 'raises ToolCallError on other errors' do
       allow_any_instance_of(Net::HTTP).to receive(:request).and_raise(StandardError.new('Network failure'))
-      expect { server.call_tool(tool_name, parameters) }.to raise_error(MCP::Errors::ToolCallError, /Error calling tool/)
+      expect do
+        server.call_tool(tool_name, parameters)
+      end.to raise_error(MCP::Errors::ToolCallError, /Error calling tool/)
     end
   end
 

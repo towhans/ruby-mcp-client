@@ -1,3 +1,5 @@
+# frozen_string_literal: true
+
 require 'bundler/setup'
 require 'rspec'
 $LOAD_PATH.unshift File.expand_path('../lib', __dir__)
@@ -22,12 +24,12 @@ RSpec.configure do |config|
   config.expect_with :rspec do |c|
     c.syntax = :expect
   end
-  
+
   # Disable WebMock for integration tests
   config.before(:each, integration: true) do
     WebMock.allow_net_connect!
   end
-  
+
   config.after(:each, integration: true) do
     WebMock.disable_net_connect!(allow_localhost: true)
   end

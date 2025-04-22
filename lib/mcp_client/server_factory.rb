@@ -8,9 +8,9 @@ module MCPClient
     # @return [MCPClient::ServerBase] server instance
     def self.create(config)
       case config[:type]
-      when "stdio"
+      when 'stdio'
         MCPClient::ServerStdio.new(command: config[:command])
-      when "sse"
+      when 'sse'
         MCPClient::ServerSSE.new(
           base_url: config[:base_url],
           headers: config[:headers] || {}

@@ -16,10 +16,10 @@ module MCP
     # @return [MCP::Tool] tool instance
     def self.from_json(data)
       # Some servers (Playwright MCP CLI) use 'inputSchema' instead of 'schema'
-      schema = data["inputSchema"] || data["schema"]
+      schema = data['inputSchema'] || data['schema']
       new(
-        name: data["name"],
-        description: data["description"],
+        name: data['name'],
+        description: data['description'],
         schema: schema
       )
     end
@@ -28,7 +28,7 @@ module MCP
     # @return [Hash] OpenAI function specification
     def to_openai_tool
       {
-        type: "function",
+        type: 'function',
         function: {
           name: @name,
           description: @description,
@@ -36,7 +36,7 @@ module MCP
         }
       }
     end
-    
+
     # Convert tool to Anthropic Claude tool specification format
     # @return [Hash] Anthropic Claude tool specification
     def to_anthropic_tool

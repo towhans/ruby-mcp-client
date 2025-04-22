@@ -1,14 +1,17 @@
+# frozen_string_literal: true
+
 require 'spec_helper'
 require 'pathname'
 
-RSpec.describe 'MCPClient integration with ruby-openai', :integration, vcr: { cassette_name: 'openai_mcp_integration' } do
+RSpec.describe 'MCPClient integration with ruby-openai', :integration,
+               vcr: { cassette_name: 'openai_mcp_integration' } do
   let(:local_path) { Dir.pwd }
   let(:mcp_client) do
     MCPClient.create_client(
       mcp_server_configs: [
         # Use JSON-RPC stdio to communicate with the Node MCP filesystem server
         MCPClient.stdio_config(
-          command: ["npx", "-y", "@modelcontextprotocol/server-filesystem", local_path]
+          command: ['npx', '-y', '@modelcontextprotocol/server-filesystem', local_path]
         )
       ]
     )
@@ -27,21 +30,21 @@ RSpec.describe 'MCPClient integration with ruby-openai', :integration, vcr: { ca
   it 'queries local file system MCP to get a list of files' do
     # Prepare function definitions from MCP tools
     tools = mcp_client.to_openai_tools
-    
+
     # Build chat messages
     messages = [
       { role: 'system', content: 'You can call MCP tools.' },
       { role: 'user', content: 'List all files in current directory' }
     ]
-    
+
     # Call OpenAI Chat API with function definitions
     response = openai.chat(parameters: {
-      model: 'gpt-4o-mini',
-      messages: messages,
-      tools: tools,
-      tool_choice: 'auto'
-    })
-    
+                             model: 'gpt-4o-mini',
+                             messages: messages,
+                             tools: tools,
+                             tool_choice: 'auto'
+                           })
+
     # Extract the function call from the response
     tool_call = response.dig('choices', 0, 'message', 'tool_calls', 0)
     expect(tool_call).not_to be_nil
@@ -56,12 +59,12 @@ RSpec.describe 'MCPClient integration with ruby-openai', :integration, vcr: { ca
 
     # Check results: raw content from filesystem server
     expect(result).to be_a(Hash)
-    expect(result).to have_key("content")
+    expect(result).to have_key('content')
     # Combine any text chunks
-    listing = result["content"].map { |chunk| chunk["text"] }.join
-    expect(listing).to include("[DIR] lib")
-    expect(listing).to include("[DIR] spec")
-    expect(listing).to include("[FILE] README.md")
+    listing = result['content'].map { |chunk| chunk['text'] }.join
+    expect(listing).to include('[DIR] lib')
+    expect(listing).to include('[DIR] spec')
+    expect(listing).to include('[FILE] README.md')
 
     # Add a tool result message back to the conversation
     messages << { role: 'assistant', tool_calls: [tool_call] }
@@ -69,17 +72,17 @@ RSpec.describe 'MCPClient integration with ruby-openai', :integration, vcr: { ca
 
     # Get the final response
     final_response = openai.chat(parameters: {
-      model: 'gpt-4o-mini',
-      messages: messages
-    })
+                                   model: 'gpt-4o-mini',
+                                   messages: messages
+                                 })
     response_content = final_response.dig('choices', 0, 'message', 'content')
-    
+
     # Response content assertions
-    expect(response_content).to include("lib")
-    expect(response_content).to include("spec")
-    expect(response_content).to include("README.md")
+    expect(response_content).to include('lib')
+    expect(response_content).to include('spec')
+    expect(response_content).to include('README.md')
 
     expect(mcp_client.to_openai_tools).to all(be_a(Hash))
-    expect(mcp_client.to_openai_tools.first).to include(:type, :function )
+    expect(mcp_client.to_openai_tools.first).to include(:type, :function)
   end
 end

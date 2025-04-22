@@ -1,9 +1,9 @@
 # frozen_string_literal: true
 
-require "uri"
-require "net/http"
-require "json"
-require "openssl"
+require 'uri'
+require 'net/http'
+require 'json'
+require 'openssl'
 
 module MCPClient
   # Implementation of MCP server that communicates via Server-Sent Events (SSE)
@@ -14,7 +14,8 @@ module MCPClient
     # @param base_url [String] The base URL of the MCP server
     # @param headers [Hash] Additional headers to include in requests
     def initialize(base_url:, headers: {})
-      @base_url = base_url.end_with?("/") ? base_url : "#{base_url}/"
+      super()
+      @base_url = base_url.end_with?('/') ? base_url : "#{base_url}/"
       @headers = headers
       @http_client = nil
       @tools = nil
@@ -42,7 +43,7 @@ module MCPClient
         end
 
         data = JSON.parse(response.body)
-        @tools = data["tools"].map do |tool_data|
+        @tools = data['tools'].map do |tool_data|
           MCPClient::Tool.from_json(tool_data)
         end
       rescue JSON::ParserError => e
@@ -65,7 +66,7 @@ module MCPClient
       begin
         uri = URI.parse("#{@base_url}call_tool")
         request = Net::HTTP::Post.new(uri)
-        request.content_type = "application/json"
+        request.content_type = 'application/json'
         @headers.each { |k, v| request[k] = v }
 
         request.body = {
@@ -80,7 +81,7 @@ module MCPClient
         end
 
         data = JSON.parse(response.body)
-        data["result"]
+        data['result']
       rescue JSON::ParserError => e
         raise MCPClient::Errors::TransportError, "Invalid JSON response from server: #{e.message}"
       rescue StandardError => e
@@ -96,7 +97,7 @@ module MCPClient
       @http_client = Net::HTTP.new(uri.host, uri.port)
 
       # Configure SSL if using HTTPS
-      if uri.scheme == "https"
+      if uri.scheme == 'https'
         @http_client.use_ssl = true
         @http_client.verify_mode = OpenSSL::SSL::VERIFY_PEER
         @http_client.open_timeout = 10

@@ -1,23 +1,24 @@
 #!/usr/bin/env ruby
 # frozen_string_literal: true
+
 # MCP integration example using the openai/openai-ruby gem
 require_relative '../lib/mcp_client'
-require "bundler/setup"
-require "openai"
+require 'bundler/setup'
+require 'openai'
 require 'json'
 
 # Ensure the OPENAI_API_KEY environment variable is set
-api_key = ENV['OPENAI_API_KEY']
-abort "Please set OPENAI_API_KEY" unless api_key
+api_key = ENV.fetch('OPENAI_API_KEY', nil)
+abort 'Please set OPENAI_API_KEY' unless api_key
 
 # Create an MCP client (stdio stub for demo)
- mcp_client = MCPClient.create_client(
+mcp_client = MCPClient.create_client(
   mcp_server_configs: [
     MCPClient.stdio_config(
       command: %W[npx -y @modelcontextprotocol/server-filesystem #{Dir.pwd}]
     )
   ]
- )
+)
 
 # Initialize the OpenAI client
 client = OpenAI::Client.new(api_key: api_key)
@@ -26,16 +27,16 @@ client = OpenAI::Client.new(api_key: api_key)
 tools = mcp_client.to_openai_tools
 
 # Build initial chat messages
- messages = [
-  { role: "system", content: "You can call filesystem tools." },
-  { role: "user", content: "List all files in current directory" }
- ]
+messages = [
+  { role: 'system', content: 'You can call filesystem tools.' },
+  { role: 'user', content: 'List all files in current directory' }
+]
 
 # 1) Send chat with function definitions
 response = client.chat.completions.create(
-    model: "gpt-4.1-mini",
-    messages: messages,
-    tools: tools
+  model: 'gpt-4.1-mini',
+  messages: messages,
+  tools: tools
 )
 
 # Extract function call details
@@ -53,8 +54,8 @@ messages << { role: 'tool', tool_call_id: message[:id], name: name, content: res
 
 # 4) Get final response from the model
 final = client.chat.completions.create(
-    model: "gpt-4.1-mini",
-    messages: messages
+  model: 'gpt-4.1-mini',
+  messages: messages
 )
 
 puts final.choices[0].message.content

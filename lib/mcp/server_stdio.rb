@@ -1,19 +1,21 @@
 # frozen_string_literal: true
 
-require "open3"
-require "json"
-require_relative "version"
+require 'open3'
+require 'json'
+require_relative 'version'
 
 module MCP
   # JSON-RPC implementation of MCP server over stdio.
   class ServerStdio < ServerBase
     attr_reader :command
+
     # Timeout in seconds for responses
     READ_TIMEOUT = 15
 
     # @param command [String, Array] the stdio command to launch the MCP JSON-RPC server
     def initialize(command:)
-      @command = command.is_a?(Array) ? command.join(" ") : command
+      super()
+      @command = command.is_a?(Array) ? command.join(' ') : command
       @mutex = Mutex.new
       @cond = ConditionVariable.new
       @next_id = 1
@@ -47,8 +49,9 @@ module MCP
     # @param line [String] line of output to parse
     def handle_line(line)
       msg = JSON.parse(line)
-      id = msg["id"]
+      id = msg['id']
       return unless id
+
       @mutex.synchronize do
         @pending[id] = msg
         @cond.broadcast
@@ -65,13 +68,14 @@ module MCP
       ensure_initialized
       req_id = next_id
       # JSON-RPC method for listing tools
-      req = {"jsonrpc" => "2.0", "id" => req_id, "method" => "tools/list", "params" => {}}
+      req = { 'jsonrpc' => '2.0', 'id' => req_id, 'method' => 'tools/list', 'params' => {} }
       send_request(req)
       res = wait_response(req_id)
-      if (err = res["error"])
-        raise MCP::Errors::ServerError, err["message"]
+      if (err = res['error'])
+        raise MCP::Errors::ServerError, err['message']
       end
-      (res.dig("result", "tools") || []).map { |td| MCP::Tool.from_json(td) }
+
+      (res.dig('result', 'tools') || []).map { |td| MCP::Tool.from_json(td) }
     rescue StandardError => e
       raise MCP::Errors::ToolCallError, "Error listing tools: #{e.message}"
     end
@@ -87,17 +91,18 @@ module MCP
       req_id = next_id
       # JSON-RPC method for calling a tool
       req = {
-        "jsonrpc" => "2.0",
-        "id" => req_id,
-        "method" => "tools/call",
-        "params" => {"name" => tool_name, "arguments" => parameters}
+        'jsonrpc' => '2.0',
+        'id' => req_id,
+        'method' => 'tools/call',
+        'params' => { 'name' => tool_name, 'arguments' => parameters }
       }
       send_request(req)
       res = wait_response(req_id)
-      if (err = res["error"])
-        raise MCP::Errors::ServerError, err["message"]
+      if (err = res['error'])
+        raise MCP::Errors::ServerError, err['message']
       end
-      res["result"]
+
+      res['result']
     rescue StandardError => e
       raise MCP::Errors::ToolCallError, "Error calling tool '#{tool_name}': #{e.message}"
     end
@@ -106,11 +111,12 @@ module MCP
     # Closes all stdio handles and terminates any running processes and threads
     def cleanup
       return unless @stdin
+
       @stdin.close unless @stdin.closed?
       @stdout.close unless @stdout.closed?
       @stderr.close unless @stderr.closed?
       if @wait_thread&.alive?
-        Process.kill("TERM", @wait_thread.pid)
+        Process.kill('TERM', @wait_thread.pid)
         @wait_thread.join(1)
       end
       @reader_thread&.kill
@@ -121,6 +127,7 @@ module MCP
     end
 
     private
+
     # Ensure the server process is started and initialized (handshake)
     def ensure_initialized
       return if @initialized
@@ -137,26 +144,25 @@ module MCP
       # Initialize request
       init_id = next_id
       init_req = {
-        "jsonrpc" => "2.0",
-        "id" => init_id,
-        "method" => "initialize",
-        "params" => {
-          "protocolVersion" => "2024-11-05",
-          "capabilities" => {},
-          "clientInfo" => {"name" => "ruby-mcp-client", "version" => MCP::VERSION}
+        'jsonrpc' => '2.0',
+        'id' => init_id,
+        'method' => 'initialize',
+        'params' => {
+          'protocolVersion' => '2024-11-05',
+          'capabilities' => {},
+          'clientInfo' => { 'name' => 'ruby-mcp-client', 'version' => MCP::VERSION }
         }
       }
       send_request(init_req)
       res = wait_response(init_id)
-      if (err = res["error"])
-        raise MCP::Errors::ConnectionError, "Initialize failed: #{err["message"]}"
+      if (err = res['error'])
+        raise MCP::Errors::ConnectionError, "Initialize failed: #{err['message']}"
       end
+
       # Send initialized notification
-      notif = {"jsonrpc" => "2.0", "method" => "notifications/initialized", "params" => {}}
+      notif = { 'jsonrpc' => '2.0', 'method' => 'notifications/initialized', 'params' => {} }
       @stdin.puts(notif.to_json)
     end
-
-    private
 
     def next_id
       @mutex.synchronize do
@@ -178,13 +184,13 @@ module MCP
         until @pending.key?(id)
           remaining = deadline - Time.now
           break if remaining <= 0
+
           @cond.wait(@mutex, remaining)
         end
         msg = @pending[id]
         @pending[id] = nil
-        unless msg
-          raise MCP::Errors::TransportError, "Timeout waiting for JSONRPC response id=#{id}"
-        end
+        raise MCP::Errors::TransportError, "Timeout waiting for JSONRPC response id=#{id}" unless msg
+
         msg
       end
     end

@@ -1,14 +1,14 @@
 # frozen_string_literal: true
 
 # Load the main module
-require_relative "mcp_client"
+require_relative 'mcp_client'
 
 # This module exists for backward compatibility with code that used MCP instead of MCPClient
 module MCP
   # Forward all class methods to MCPClient
-  def self.method_missing(method_name, *args, **kwargs, &block)
+  def self.method_missing(method_name, ...)
     if MCPClient.respond_to?(method_name)
-      MCPClient.send(method_name, *args, **kwargs, &block)
+      MCPClient.send(method_name, ...)
     else
       super
     end

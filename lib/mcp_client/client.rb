@@ -50,7 +50,7 @@ module MCPClient
     def to_openai_tools
       list_tools.map(&:to_openai_tool)
     end
-    
+
     # Convert MCP tools to Anthropic Claude tool specifications
     # @return [Array<Hash>] Anthropic Claude tool specifications
     def to_anthropic_tools

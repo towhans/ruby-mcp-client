@@ -8,9 +8,9 @@ module MCP
     # @return [MCP::ServerBase] server instance
     def self.create(config)
       case config[:type]
-      when "stdio"
+      when 'stdio'
         MCP::ServerStdio.new(command: config[:command])
-      when "sse"
+      when 'sse'
         MCP::ServerSSE.new(
           base_url: config[:base_url],
           headers: config[:headers] || {}

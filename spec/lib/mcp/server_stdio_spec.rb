@@ -1,3 +1,5 @@
+# frozen_string_literal: true
+
 require 'spec_helper'
 
 RSpec.describe MCP::ServerStdio do
@@ -10,7 +12,7 @@ RSpec.describe MCP::ServerStdio do
     end
 
     it 'converts array command to string' do
-      server = described_class.new(command: ['echo', 'test'])
+      server = described_class.new(command: %w[echo test])
       expect(server.command).to eq('echo test')
     end
   end
@@ -57,7 +59,7 @@ RSpec.describe MCP::ServerStdio do
       @stdin = StringIO.new
       @stdout = StringIO.new
       @stderr = StringIO.new
-      @wait_thread = double('wait_thread', pid: 12345, alive?: true)
+      @wait_thread = double('wait_thread', pid: 12_345, alive?: true)
 
       allow(Open3).to receive(:popen3).and_return([@stdin, @stdout, @wait_thread, @stderr])
       allow(Process).to receive(:kill)
@@ -102,7 +104,7 @@ RSpec.describe MCP::ServerStdio do
         'jsonrpc' => '2.0',
         'id' => 1,
         'error' => {
-          'code' => -32000,
+          'code' => -32_000,
           'message' => 'Server error'
         }
       }
@@ -133,7 +135,7 @@ RSpec.describe MCP::ServerStdio do
       @stdin = StringIO.new
       @stdout = StringIO.new
       @stderr = StringIO.new
-      @wait_thread = double('wait_thread', pid: 12345, alive?: true)
+      @wait_thread = double('wait_thread', pid: 12_345, alive?: true)
 
       allow(Open3).to receive(:popen3).and_return([@stdin, @stdout, @wait_thread, @stderr])
       allow(Process).to receive(:kill)
@@ -144,7 +146,7 @@ RSpec.describe MCP::ServerStdio do
       allow(server).to receive(:start_reader)
       allow(server).to receive(:perform_initialize)
       allow(server).to receive(:wait_response).and_return(response)
-      
+
       # Properly initialize the server to avoid nil errors
       server.instance_variable_set(:@initialized, true)
       server.instance_variable_set(:@stdin, StringIO.new)
@@ -174,17 +176,21 @@ RSpec.describe MCP::ServerStdio do
         'jsonrpc' => '2.0',
         'id' => 1,
         'error' => {
-          'code' => -32000,
+          'code' => -32_000,
           'message' => 'Server error'
         }
       }
       allow(server).to receive(:wait_response).and_return(error_response)
-      expect { server.call_tool(tool_name, parameters) }.to raise_error(MCP::Errors::ToolCallError, /Error calling tool/)
+      expect do
+        server.call_tool(tool_name, parameters)
+      end.to raise_error(MCP::Errors::ToolCallError, /Error calling tool/)
     end
 
     it 'raises ToolCallError on other errors' do
       allow(server).to receive(:send_request).and_raise(StandardError.new('Communication error'))
-      expect { server.call_tool(tool_name, parameters) }.to raise_error(MCP::Errors::ToolCallError, /Error calling tool/)
+      expect do
+        server.call_tool(tool_name, parameters)
+      end.to raise_error(MCP::Errors::ToolCallError, /Error calling tool/)
     end
   end
 
@@ -193,7 +199,7 @@ RSpec.describe MCP::ServerStdio do
       @stdin = double('stdin', close: nil, closed?: false)
       @stdout = double('stdout', close: nil, closed?: false)
       @stderr = double('stderr', close: nil, closed?: false)
-      @wait_thread = double('wait_thread', pid: 12345, alive?: true, join: nil)
+      @wait_thread = double('wait_thread', pid: 12_345, alive?: true, join: nil)
       @reader_thread = double('reader_thread', kill: nil)
 
       allow(Open3).to receive(:popen3).and_return([@stdin, @stdout, @stderr, @wait_thread])
@@ -265,9 +271,9 @@ RSpec.describe MCP::ServerStdio do
 
       it 'raises TransportError on error' do
         allow(@stdin).to receive(:puts).and_raise(IOError.new('Stream closed'))
-        expect {
+        expect do
           server.send(:send_request, {})
-        }.to raise_error(MCP::Errors::TransportError, /Failed to send JSONRPC request/)
+        end.to raise_error(MCP::Errors::TransportError, /Failed to send JSONRPC request/)
       end
     end
 

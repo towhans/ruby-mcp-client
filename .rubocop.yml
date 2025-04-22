@@ -1,6 +1,7 @@
 AllCops:
   TargetRubyVersion: 3.3.5
   NewCops: enable
+  SuggestExtensions: false
   Exclude:
     - 'vendor/**/*'
     - 'bin/**/*'
@@ -15,6 +16,27 @@ Metrics/AbcSize:
 
 Metrics/MethodLength:
   Max: 25
+
+Metrics/ClassLength:
+  Max: 140
+  Exclude:
+    - 'spec/**/*'
+
+Metrics/BlockLength:
+  Exclude:
+    - 'spec/**/*'
+
+Metrics/CyclomaticComplexity:
+  Max: 10
+
+Metrics/PerceivedComplexity:
+  Max: 10
+
+Gemspec/DevelopmentDependencies:
+  Enabled: false
+
+Gemspec/RequiredRubyVersion:
+  Enabled: false
 
 Style/Documentation:
   Enabled: true

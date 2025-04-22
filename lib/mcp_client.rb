@@ -1,14 +1,14 @@
 # frozen_string_literal: true
 
 # Load all MCPClient components
-require_relative "mcp_client/errors"
-require_relative "mcp_client/tool"
-require_relative "mcp_client/server_base"
-require_relative "mcp_client/server_stdio"
-require_relative "mcp_client/server_sse"
-require_relative "mcp_client/server_factory"
-require_relative "mcp_client/client"
-require_relative "mcp_client/version"
+require_relative 'mcp_client/errors'
+require_relative 'mcp_client/tool'
+require_relative 'mcp_client/server_base'
+require_relative 'mcp_client/server_stdio'
+require_relative 'mcp_client/server_sse'
+require_relative 'mcp_client/server_factory'
+require_relative 'mcp_client/client'
+require_relative 'mcp_client/version'
 
 # Model Context Protocol (MCP) Client module
 # Provides a standardized way for agents to communicate with external tools and services
@@ -26,7 +26,7 @@ module MCPClient
   # @return [Hash] server configuration
   def self.stdio_config(command:)
     {
-      type: "stdio",
+      type: 'stdio',
       command: command
     }
   end
@@ -37,7 +37,7 @@ module MCPClient
   # @return [Hash] server configuration
   def self.sse_config(base_url:, headers: {})
     {
-      type: "sse",
+      type: 'sse',
       base_url: base_url,
       headers: headers
     }
@@ -45,4 +45,4 @@ module MCPClient
 end
 
 # Backward compatibility module
-require_relative "mcp"
+require_relative 'mcp'
