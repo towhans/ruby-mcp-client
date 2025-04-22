@@ -1,0 +1,288 @@
+---
+http_interactions:
+- request:
+    method: post
+    uri: https://api.openai.com/v1/chat/completions
+    body:
+      encoding: UTF-8
+      string: '{"model":"gpt-4o-mini","messages":[{"role":"system","content":"You
+        can call MCP tools."},{"role":"user","content":"List all files in current
+        directory"}],"tools":[{"type":"function","function":{"name":"read_file","description":"Read
+        the complete contents of a file from the file system. Handles various text
+        encodings and provides detailed error messages if the file cannot be read.
+        Use this tool when you need to examine the contents of a single file. Only
+        works within allowed directories.","parameters":{"type":"object","properties":{"path":{"type":"string"}},"required":["path"],"additionalProperties":false,"$schema":"http://json-schema.org/draft-07/schema#"}}},{"type":"function","function":{"name":"read_multiple_files","description":"Read
+        the contents of multiple files simultaneously. This is more efficient than
+        reading files one by one when you need to analyze or compare multiple files.
+        Each file''s content is returned with its path as a reference. Failed reads
+        for individual files won''t stop the entire operation. Only works within allowed
+        directories.","parameters":{"type":"object","properties":{"paths":{"type":"array","items":{"type":"string"}}},"required":["paths"],"additionalProperties":false,"$schema":"http://json-schema.org/draft-07/schema#"}}},{"type":"function","function":{"name":"write_file","description":"Create
+        a new file or completely overwrite an existing file with new content. Use
+        with caution as it will overwrite existing files without warning. Handles
+        text content with proper encoding. Only works within allowed directories.","parameters":{"type":"object","properties":{"path":{"type":"string"},"content":{"type":"string"}},"required":["path","content"],"additionalProperties":false,"$schema":"http://json-schema.org/draft-07/schema#"}}},{"type":"function","function":{"name":"edit_file","description":"Make
+        line-based edits to a text file. Each edit replaces exact line sequences with
+        new content. Returns a git-style diff showing the changes made. Only works
+        within allowed directories.","parameters":{"type":"object","properties":{"path":{"type":"string"},"edits":{"type":"array","items":{"type":"object","properties":{"oldText":{"type":"string","description":"Text
+        to search for - must match exactly"},"newText":{"type":"string","description":"Text
+        to replace with"}},"required":["oldText","newText"],"additionalProperties":false}},"dryRun":{"type":"boolean","default":false,"description":"Preview
+        changes using git-style diff format"}},"required":["path","edits"],"additionalProperties":false,"$schema":"http://json-schema.org/draft-07/schema#"}}},{"type":"function","function":{"name":"create_directory","description":"Create
+        a new directory or ensure a directory exists. Can create multiple nested directories
+        in one operation. If the directory already exists, this operation will succeed
+        silently. Perfect for setting up directory structures for projects or ensuring
+        required paths exist. Only works within allowed directories.","parameters":{"type":"object","properties":{"path":{"type":"string"}},"required":["path"],"additionalProperties":false,"$schema":"http://json-schema.org/draft-07/schema#"}}},{"type":"function","function":{"name":"list_directory","description":"Get
+        a detailed listing of all files and directories in a specified path. Results
+        clearly distinguish between files and directories with [FILE] and [DIR] prefixes.
+        This tool is essential for understanding directory structure and finding specific
+        files within a directory. Only works within allowed directories.","parameters":{"type":"object","properties":{"path":{"type":"string"}},"required":["path"],"additionalProperties":false,"$schema":"http://json-schema.org/draft-07/schema#"}}},{"type":"function","function":{"name":"directory_tree","description":"Get
+        a recursive tree view of files and directories as a JSON structure. Each entry
+        includes ''name'', ''type'' (file/directory), and ''children'' for directories.
+        Files have no children array, while directories always have a children array
+        (which may be empty). The output is formatted with 2-space indentation for
+        readability. Only works within allowed directories.","parameters":{"type":"object","properties":{"path":{"type":"string"}},"required":["path"],"additionalProperties":false,"$schema":"http://json-schema.org/draft-07/schema#"}}},{"type":"function","function":{"name":"move_file","description":"Move
+        or rename files and directories. Can move files between directories and rename
+        them in a single operation. If the destination exists, the operation will
+        fail. Works across different directories and can be used for simple renaming
+        within the same directory. Both source and destination must be within allowed
+        directories.","parameters":{"type":"object","properties":{"source":{"type":"string"},"destination":{"type":"string"}},"required":["source","destination"],"additionalProperties":false,"$schema":"http://json-schema.org/draft-07/schema#"}}},{"type":"function","function":{"name":"search_files","description":"Recursively
+        search for files and directories matching a pattern. Searches through all
+        subdirectories from the starting path. The search is case-insensitive and
+        matches partial names. Returns full paths to all matching items. Great for
+        finding files when you don''t know their exact location. Only searches within
+        allowed directories.","parameters":{"type":"object","properties":{"path":{"type":"string"},"pattern":{"type":"string"},"excludePatterns":{"type":"array","items":{"type":"string"},"default":[]}},"required":["path","pattern"],"additionalProperties":false,"$schema":"http://json-schema.org/draft-07/schema#"}}},{"type":"function","function":{"name":"get_file_info","description":"Retrieve
+        detailed metadata about a file or directory. Returns comprehensive information
+        including size, creation time, last modified time, permissions, and type.
+        This tool is perfect for understanding file characteristics without reading
+        the actual content. Only works within allowed directories.","parameters":{"type":"object","properties":{"path":{"type":"string"}},"required":["path"],"additionalProperties":false,"$schema":"http://json-schema.org/draft-07/schema#"}}},{"type":"function","function":{"name":"list_allowed_directories","description":"Returns
+        the list of directories that this server is allowed to access. Use this to
+        understand which directories are available before trying to access files.","parameters":{"type":"object","properties":{},"required":[]}}}],"tool_choice":"auto"}'
+    headers:
+      Content-Type:
+      - application/json
+      Authorization:
+      - Bearer <OPENAI_API_KEY>
+      Accept-Encoding:
+      - gzip;q=1.0,deflate;q=0.6,identity;q=0.3
+      Accept:
+      - "*/*"
+      User-Agent:
+      - Ruby
+  response:
+    status:
+      code: 200
+      message: OK
+    headers:
+      Date:
+      - Tue, 22 Apr 2025 17:56:38 GMT
+      Content-Type:
+      - application/json
+      Transfer-Encoding:
+      - chunked
+      Connection:
+      - keep-alive
+      Access-Control-Expose-Headers:
+      - X-Request-ID
+      Openai-Organization:
+      - tropic-7
+      Openai-Processing-Ms:
+      - '601'
+      Openai-Version:
+      - '2020-10-01'
+      X-Ratelimit-Limit-Requests:
+      - '30000'
+      X-Ratelimit-Limit-Tokens:
+      - '150000000'
+      X-Ratelimit-Remaining-Requests:
+      - '29999'
+      X-Ratelimit-Remaining-Tokens:
+      - '149999982'
+      X-Ratelimit-Reset-Requests:
+      - 2ms
+      X-Ratelimit-Reset-Tokens:
+      - 0s
+      X-Request-Id:
+      - req_83fd6c34f185bbf1f7289c1a55ea97df
+      Strict-Transport-Security:
+      - max-age=31536000; includeSubDomains; preload
+      Cf-Cache-Status:
+      - DYNAMIC
+      Set-Cookie:
+      - __cf_bm=L4ko_mzAnIwI.ZK9WooxBuuDYY0bvlJi6s_Rp8MqjsI-1745344598-1.0.1.1-cpccepwYjycxqaX.mtxNL8q06gJklfJI.tJncun39PYbj7SMsCr6suv2X3CS6VqGfeDa_Lq4glUiuKT6r3ogRpUk_h3IujzKCZ2mwBdFCy0;
+        path=/; expires=Tue, 22-Apr-25 18:26:38 GMT; domain=.api.openai.com; HttpOnly;
+        Secure; SameSite=None
+      - _cfuvid=FpgD_.j0WGD7vqIvZcB640Me5ov6AiBuU_qEVnr3uqg-1745344598395-0.0.1.1-604800000;
+        path=/; domain=.api.openai.com; HttpOnly; Secure; SameSite=None
+      X-Content-Type-Options:
+      - nosniff
+      Server:
+      - cloudflare
+      Cf-Ray:
+      - 9346ffb5faa6ea48-FCO
+      Alt-Svc:
+      - h3=":443"; ma=86400
+    body:
+      encoding: ASCII-8BIT
+      string: |
+        {
+          "id": "chatcmpl-BPC9F5dTzUJ4dDDIe14REEqIgNUaG",
+          "object": "chat.completion",
+          "created": 1745344597,
+          "model": "gpt-4o-mini-2024-07-18",
+          "choices": [
+            {
+              "index": 0,
+              "message": {
+                "role": "assistant",
+                "content": null,
+                "tool_calls": [
+                  {
+                    "id": "call_KxMCFxBhbB8FOmdDTZvHYOhx",
+                    "type": "function",
+                    "function": {
+                      "name": "list_directory",
+                      "arguments": "{\"path\":\".\"}"
+                    }
+                  }
+                ],
+                "refusal": null,
+                "annotations": []
+              },
+              "logprobs": null,
+              "finish_reason": "tool_calls"
+            }
+          ],
+          "usage": {
+            "prompt_tokens": 809,
+            "completion_tokens": 15,
+            "total_tokens": 824,
+            "prompt_tokens_details": {
+              "cached_tokens": 0,
+              "audio_tokens": 0
+            },
+            "completion_tokens_details": {
+              "reasoning_tokens": 0,
+              "audio_tokens": 0,
+              "accepted_prediction_tokens": 0,
+              "rejected_prediction_tokens": 0
+            }
+          },
+          "service_tier": "default",
+          "system_fingerprint": "fp_0392822090"
+        }
+  recorded_at: Tue, 22 Apr 2025 17:56:38 GMT
+- request:
+    method: post
+    uri: https://api.openai.com/v1/chat/completions
+    body:
+      encoding: UTF-8
+      string: '{"model":"gpt-4o-mini","messages":[{"role":"system","content":"You
+        can call MCP tools."},{"role":"user","content":"List all files in current
+        directory"},{"role":"assistant","tool_calls":[{"id":"call_KxMCFxBhbB8FOmdDTZvHYOhx","type":"function","function":{"name":"list_directory","arguments":"{\"path\":\".\"}"}}]},{"role":"tool","tool_call_id":"call_KxMCFxBhbB8FOmdDTZvHYOhx","name":"list_directory","content":"{\"content\":[{\"type\":\"text\",\"text\":\"[DIR]
+        .bundle\\n[FILE] .byebug_history\\n[DIR] .git\\n[FILE] .gitignore\\n[DIR]
+        .idea\\n[FILE] .rubocop.yml\\n[FILE] Gemfile\\n[FILE] Gemfile.lock\\n[FILE]
+        LICENSE\\n[FILE] README.md\\n[DIR] examples\\n[DIR] lib\\n[FILE] ruby-mcp-client.gemspec\\n[DIR]
+        spec\\n[DIR] vendor\"}]}"}]}'
+    headers:
+      Content-Type:
+      - application/json
+      Authorization:
+      - Bearer <OPENAI_API_KEY>
+      Accept-Encoding:
+      - gzip;q=1.0,deflate;q=0.6,identity;q=0.3
+      Accept:
+      - "*/*"
+      User-Agent:
+      - Ruby
+  response:
+    status:
+      code: 200
+      message: OK
+    headers:
+      Date:
+      - Tue, 22 Apr 2025 17:56:40 GMT
+      Content-Type:
+      - application/json
+      Transfer-Encoding:
+      - chunked
+      Connection:
+      - keep-alive
+      Access-Control-Expose-Headers:
+      - X-Request-ID
+      Openai-Organization:
+      - tropic-7
+      Openai-Processing-Ms:
+      - '1508'
+      Openai-Version:
+      - '2020-10-01'
+      X-Ratelimit-Limit-Requests:
+      - '30000'
+      X-Ratelimit-Limit-Tokens:
+      - '150000000'
+      X-Ratelimit-Remaining-Requests:
+      - '29999'
+      X-Ratelimit-Remaining-Tokens:
+      - '149999906'
+      X-Ratelimit-Reset-Requests:
+      - 2ms
+      X-Ratelimit-Reset-Tokens:
+      - 0s
+      X-Request-Id:
+      - req_2c83a9280da95a7d404c2af694b44bc0
+      Strict-Transport-Security:
+      - max-age=31536000; includeSubDomains; preload
+      Cf-Cache-Status:
+      - DYNAMIC
+      Set-Cookie:
+      - __cf_bm=T98.UCutaSoBJQFIMH3RN91DhuEqd6z6QDGKutE8rpY-1745344600-1.0.1.1-baEnI0v0e12ai0_DvE.wDInb4BkEqOMA_wGZC9IakPI87h8EtemsEZSXu3xpJvaBYverQ1SQJVye4rKh6Blf8yKbL6KzRazC8MLkUj8_IHg;
+        path=/; expires=Tue, 22-Apr-25 18:26:40 GMT; domain=.api.openai.com; HttpOnly;
+        Secure; SameSite=None
+      - _cfuvid=jndD9QkneJzB7OVAt34WKVGmgLumsKRkA2IXmgsnpEU-1745344600157-0.0.1.1-604800000;
+        path=/; domain=.api.openai.com; HttpOnly; Secure; SameSite=None
+      X-Content-Type-Options:
+      - nosniff
+      Server:
+      - cloudflare
+      Cf-Ray:
+      - 9346ffbc8e80ea6b-FCO
+      Alt-Svc:
+      - h3=":443"; ma=86400
+    body:
+      encoding: ASCII-8BIT
+      string: |
+        {
+          "id": "chatcmpl-BPC9GDSms3mXjnd3siYbCFOGbXnJF",
+          "object": "chat.completion",
+          "created": 1745344598,
+          "model": "gpt-4o-mini-2024-07-18",
+          "choices": [
+            {
+              "index": 0,
+              "message": {
+                "role": "assistant",
+                "content": "Here are the files and directories in the current directory:\n\n- **Directories:**\n  - .bundle\n  - .git\n  - .idea\n  - examples\n  - lib\n  - spec\n  - vendor\n\n- **Files:**\n  - .byebug_history\n  - .gitignore\n  - .rubocop.yml\n  - Gemfile\n  - Gemfile.lock\n  - LICENSE\n  - README.md\n  - ruby-mcp-client.gemspec",
+                "refusal": null,
+                "annotations": []
+              },
+              "logprobs": null,
+              "finish_reason": "stop"
+            }
+          ],
+          "usage": {
+            "prompt_tokens": 152,
+            "completion_tokens": 102,
+            "total_tokens": 254,
+            "prompt_tokens_details": {
+              "cached_tokens": 0,
+              "audio_tokens": 0
+            },
+            "completion_tokens_details": {
+              "reasoning_tokens": 0,
+              "audio_tokens": 0,
+              "accepted_prediction_tokens": 0,
+              "rejected_prediction_tokens": 0
+            }
+          },
+          "service_tier": "default",
+          "system_fingerprint": "fp_0392822090"
+        }
+  recorded_at: Tue, 22 Apr 2025 17:56:40 GMT
+recorded_with: VCR 6.3.1
