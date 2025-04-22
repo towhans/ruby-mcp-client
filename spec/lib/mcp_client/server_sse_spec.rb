@@ -2,7 +2,7 @@
 
 require 'spec_helper'
 
-RSpec.describe MCP::ServerSSE do
+RSpec.describe MCPClient::ServerSSE do
   let(:base_url) { 'https://example.com/mcp/' }
   let(:headers) { { 'Authorization' => 'Bearer token123' } }
   let(:server) { described_class.new(base_url: base_url, headers: headers) }
@@ -53,7 +53,7 @@ RSpec.describe MCP::ServerSSE do
 
     it 'raises ConnectionError on failure' do
       allow(Net::HTTP).to receive(:new).and_raise(StandardError.new('Connection failed'))
-      expect { server.connect }.to raise_error(MCP::Errors::ConnectionError, /Failed to connect/)
+      expect { server.connect }.to raise_error(MCPClient::Errors::ConnectionError, /Failed to connect/)
     end
   end
 
@@ -76,14 +76,14 @@ RSpec.describe MCP::ServerSSE do
     it 'returns a list of Tool objects' do
       tools = server.list_tools
       expect(tools.length).to eq(1)
-      expect(tools.first).to be_a(MCP::Tool)
+      expect(tools.first).to be_a(MCPClient::Tool)
       expect(tools.first.name).to eq('test_tool')
     end
 
     it 'caches the tools' do
       server.list_tools
       expect(server.tools).to be_an(Array)
-      expect(server.tools.first).to be_a(MCP::Tool)
+      expect(server.tools.first).to be_a(MCPClient::Tool)
     end
 
     it 'raises ToolCallError on non-success response' do
@@ -91,7 +91,7 @@ RSpec.describe MCP::ServerSSE do
         .with(headers: headers)
         .to_return(status: 500, body: 'Server Error')
 
-      expect { server.list_tools }.to raise_error(MCP::Errors::ToolCallError, /Error listing tools/)
+      expect { server.list_tools }.to raise_error(MCPClient::Errors::ToolCallError, /Error listing tools/)
     end
 
     it 'raises TransportError on invalid JSON' do
@@ -103,12 +103,12 @@ RSpec.describe MCP::ServerSSE do
           headers: { 'Content-Type' => 'application/json' }
         )
 
-      expect { server.list_tools }.to raise_error(MCP::Errors::TransportError, /Invalid JSON response/)
+      expect { server.list_tools }.to raise_error(MCPClient::Errors::TransportError, /Invalid JSON response/)
     end
 
     it 'raises ToolCallError on other errors' do
       allow_any_instance_of(Net::HTTP).to receive(:request).and_raise(StandardError.new('Network failure'))
-      expect { server.list_tools }.to raise_error(MCP::Errors::ToolCallError, /Error listing tools/)
+      expect { server.list_tools }.to raise_error(MCPClient::Errors::ToolCallError, /Error listing tools/)
     end
   end
 
@@ -150,7 +150,7 @@ RSpec.describe MCP::ServerSSE do
 
       expect do
         server.call_tool(tool_name, parameters)
-      end.to raise_error(MCP::Errors::ToolCallError, /Error calling tool/)
+      end.to raise_error(MCPClient::Errors::ToolCallError, /Error calling tool/)
     end
 
     it 'raises TransportError on invalid JSON' do
@@ -167,14 +167,14 @@ RSpec.describe MCP::ServerSSE do
 
       expect do
         server.call_tool(tool_name, parameters)
-      end.to raise_error(MCP::Errors::TransportError, /Invalid JSON response/)
+      end.to raise_error(MCPClient::Errors::TransportError, /Invalid JSON response/)
     end
 
     it 'raises ToolCallError on other errors' do
       allow_any_instance_of(Net::HTTP).to receive(:request).and_raise(StandardError.new('Network failure'))
       expect do
         server.call_tool(tool_name, parameters)
-      end.to raise_error(MCP::Errors::ToolCallError, /Error calling tool/)
+      end.to raise_error(MCPClient::Errors::ToolCallError, /Error calling tool/)
     end
   end
 

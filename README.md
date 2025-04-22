@@ -59,10 +59,6 @@ client = MCPClient.create_client(
   ]
 )
 
-# Or use the backward-compatible MCP namespace
-# require 'mcp'
-# client = MCP.create_client(...)
-
 # List available tools
 tools = client.list_tools
 

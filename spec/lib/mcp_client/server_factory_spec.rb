@@ -2,7 +2,7 @@
 
 require 'spec_helper'
 
-RSpec.describe MCP::ServerFactory do
+RSpec.describe MCPClient::ServerFactory do
   describe '.create' do
     context 'with stdio config' do
       let(:command) { 'python test.py' }
@@ -10,7 +10,7 @@ RSpec.describe MCP::ServerFactory do
 
       it 'creates a ServerStdio instance' do
         server = described_class.create(config)
-        expect(server).to be_a(MCP::ServerStdio)
+        expect(server).to be_a(MCPClient::ServerStdio)
         expect(server.command).to eq(command)
       end
     end
@@ -22,7 +22,7 @@ RSpec.describe MCP::ServerFactory do
 
       it 'creates a ServerSSE instance' do
         server = described_class.create(config)
-        expect(server).to be_a(MCP::ServerSSE)
+        expect(server).to be_a(MCPClient::ServerSSE)
         expect(server.base_url).to eq('https://example.com/mcp/')
       end
     end

@@ -43,6 +43,3 @@ module MCPClient
     }
   end
 end
-
-# Backward compatibility module
-require_relative 'mcp'

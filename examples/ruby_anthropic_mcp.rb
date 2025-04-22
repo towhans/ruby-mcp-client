@@ -1,7 +1,7 @@
 #!/usr/bin/env ruby
 # frozen_string_literal: true
 
-# MCP integration example using the alexrudall/ruby-anthropic gem
+# MCPClient integration example using the alexrudall/ruby-anthropic gem
 require_relative '../lib/mcp_client'
 require 'anthropic'
 require 'json'
@@ -10,7 +10,7 @@ require 'json'
 api_key = ENV.fetch('ANTHROPIC_API_KEY', nil)
 abort 'Please set ANTHROPIC_API_KEY' unless api_key
 
-# Create an MCP client (stdio stub for demo)
+# Create an MCPClient client (stdio stub for demo)
 mcp_client = MCPClient.create_client(
   mcp_server_configs: [
     MCPClient.stdio_config(
@@ -22,10 +22,10 @@ mcp_client = MCPClient.create_client(
 # Initialize the Anthropic client
 client = Anthropic::Client.new(access_token: api_key)
 
-# Get MCP tools
+# Get MCPClient tools
 mcp_client.list_tools
 
-# Convert MCP tools to Claude tool format
+# Convert MCPClient tools to Claude tool format
 claude_tools = mcp_client.to_anthropic_tools
 
 # Build initial chat messages
@@ -68,8 +68,8 @@ tool_id = tool_use['id']
 
 puts "Found tool use: #{name} with ID: #{tool_id}"
 
-# 2) Invoke the MCP tool
-puts "Calling MCP tool: #{name}"
+# 2) Invoke the MCPClient tool
+puts "Calling MCPClient tool: #{name}"
 puts "Tool input: #{input.inspect}"
 # Input is already a Hash, no need to parse it
 result = mcp_client.call_tool(name, input)

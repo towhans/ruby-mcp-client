@@ -2,10 +2,10 @@
 
 require 'spec_helper'
 
-RSpec.describe MCP::ServerBase do
+RSpec.describe MCPClient::ServerBase do
   let(:base_server) do
     # create an anonymous subclass without implementing abstract methods
-    Class.new(MCP::ServerBase) do
+    Class.new(MCPClient::ServerBase) do
       # no overrides
     end.new
   end

@@ -2,7 +2,7 @@
 
 require 'spec_helper'
 
-RSpec.describe MCP::ServerStdio do
+RSpec.describe MCPClient::ServerStdio do
   let(:command) { 'echo test' }
   let(:server) { described_class.new(command: command) }
 
@@ -25,7 +25,7 @@ RSpec.describe MCP::ServerStdio do
 
     it 'raises ConnectionError on failure' do
       allow(Open3).to receive(:popen3).and_raise(StandardError.new('Failed to start process'))
-      expect { server.connect }.to raise_error(MCP::Errors::ConnectionError, /Failed to connect to MCP server/)
+      expect { server.connect }.to raise_error(MCPClient::Errors::ConnectionError, /Failed to connect to MCP server/)
     end
   end
 
@@ -95,7 +95,7 @@ RSpec.describe MCP::ServerStdio do
       tools = server.list_tools
       expect(tools).to be_an(Array)
       expect(tools.length).to eq(1)
-      expect(tools.first).to be_a(MCP::Tool)
+      expect(tools.first).to be_a(MCPClient::Tool)
       expect(tools.first.name).to eq('test_tool')
     end
 
@@ -109,12 +109,12 @@ RSpec.describe MCP::ServerStdio do
         }
       }
       allow(server).to receive(:wait_response).and_return(error_response)
-      expect { server.list_tools }.to raise_error(MCP::Errors::ToolCallError, /Error listing tools/)
+      expect { server.list_tools }.to raise_error(MCPClient::Errors::ToolCallError, /Error listing tools/)
     end
 
     it 'raises ToolCallError on other errors' do
       allow(server).to receive(:send_request).and_raise(StandardError.new('Communication error'))
-      expect { server.list_tools }.to raise_error(MCP::Errors::ToolCallError, /Error listing tools/)
+      expect { server.list_tools }.to raise_error(MCPClient::Errors::ToolCallError, /Error listing tools/)
     end
   end
 
@@ -183,14 +183,14 @@ RSpec.describe MCP::ServerStdio do
       allow(server).to receive(:wait_response).and_return(error_response)
       expect do
         server.call_tool(tool_name, parameters)
-      end.to raise_error(MCP::Errors::ToolCallError, /Error calling tool/)
+      end.to raise_error(MCPClient::Errors::ToolCallError, /Error calling tool/)
     end
 
     it 'raises ToolCallError on other errors' do
       allow(server).to receive(:send_request).and_raise(StandardError.new('Communication error'))
       expect do
         server.call_tool(tool_name, parameters)
-      end.to raise_error(MCP::Errors::ToolCallError, /Error calling tool/)
+      end.to raise_error(MCPClient::Errors::ToolCallError, /Error calling tool/)
     end
   end
 
@@ -273,7 +273,7 @@ RSpec.describe MCP::ServerStdio do
         allow(@stdin).to receive(:puts).and_raise(IOError.new('Stream closed'))
         expect do
           server.send(:send_request, {})
-        end.to raise_error(MCP::Errors::TransportError, /Failed to send JSONRPC request/)
+        end.to raise_error(MCPClient::Errors::TransportError, /Failed to send JSONRPC request/)
       end
     end
 
@@ -287,8 +287,8 @@ RSpec.describe MCP::ServerStdio do
       it 'raises TransportError on timeout' do
         server.instance_variable_set(:@pending, {})
         # Set a very short timeout for the test
-        stub_const('MCP::ServerStdio::READ_TIMEOUT', 0.1)
-        expect { server.send(:wait_response, 1) }.to raise_error(MCP::Errors::TransportError, /Timeout waiting/)
+        stub_const('MCPClient::ServerStdio::READ_TIMEOUT', 0.1)
+        expect { server.send(:wait_response, 1) }.to raise_error(MCPClient::Errors::TransportError, /Timeout waiting/)
       end
     end
 

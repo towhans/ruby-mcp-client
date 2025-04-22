@@ -2,10 +2,10 @@
 
 require 'spec_helper'
 
-RSpec.describe MCP::Client do
-  let(:mock_server) { instance_double(MCP::ServerBase) }
+RSpec.describe MCPClient::Client do
+  let(:mock_server) { instance_double(MCPClient::ServerBase) }
   let(:mock_tool) do
-    MCP::Tool.new(
+    MCPClient::Tool.new(
       name: 'test_tool',
       description: 'A test tool',
       schema: { 'type' => 'object', 'properties' => { 'param' => { 'type' => 'string' } } }
@@ -13,7 +13,7 @@ RSpec.describe MCP::Client do
   end
 
   before do
-    allow(MCP::ServerFactory).to receive(:create).and_return(mock_server)
+    allow(MCPClient::ServerFactory).to receive(:create).and_return(mock_server)
   end
 
   describe '#initialize' do
@@ -70,7 +70,7 @@ RSpec.describe MCP::Client do
     end
 
     it "raises ToolNotFound if tool doesn't exist" do
-      expect { client.call_tool('nonexistent_tool', {}) }.to raise_error(MCP::Errors::ToolNotFound)
+      expect { client.call_tool('nonexistent_tool', {}) }.to raise_error(MCPClient::Errors::ToolNotFound)
     end
   end
 

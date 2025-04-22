@@ -1,7 +1,7 @@
 #!/usr/bin/env ruby
 # frozen_string_literal: true
 
-# MCP integration example using the openai/openai-ruby gem
+# MCPClient integration example using the openai/openai-ruby gem
 require_relative '../lib/mcp_client'
 require 'bundler/setup'
 require 'openai'
@@ -11,7 +11,7 @@ require 'json'
 api_key = ENV.fetch('OPENAI_API_KEY', nil)
 abort 'Please set OPENAI_API_KEY' unless api_key
 
-# Create an MCP client (stdio stub for demo)
+# Create an MCPClient client (stdio stub for demo)
 mcp_client = MCPClient.create_client(
   mcp_server_configs: [
     MCPClient.stdio_config(
@@ -23,7 +23,7 @@ mcp_client = MCPClient.create_client(
 # Initialize the OpenAI client
 client = OpenAI::Client.new(api_key: api_key)
 
-# Convert MCP tools to OpenAI function specs
+# Convert MCPClient tools to OpenAI function specs
 tools = mcp_client.to_openai_tools
 
 # Build initial chat messages
@@ -45,7 +45,7 @@ function_call = message[:function]
 name = function_call[:name]
 args = JSON.parse(function_call[:arguments])
 
-# 2) Invoke the MCP tool
+# 2) Invoke the MCPClient tool
 result = mcp_client.call_tool(name, args)
 
 # 3) Add function call + result to conversation

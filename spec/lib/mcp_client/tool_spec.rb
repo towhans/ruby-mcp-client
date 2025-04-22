@@ -2,7 +2,7 @@
 
 require 'spec_helper'
 
-RSpec.describe MCP::Tool do
+RSpec.describe MCPClient::Tool do
   let(:tool_name) { 'test_tool' }
   let(:tool_description) { 'A test tool for testing' }
   let(:tool_schema) do

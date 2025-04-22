@@ -1,7 +1,7 @@
 #!/usr/bin/env ruby
 # frozen_string_literal: true
 
-# MCP integration example using the alexrudall/ruby-openai gem
+# MCPClient integration example using the alexrudall/ruby-openai gem
 require_relative '../lib/mcp_client'
 require 'openai'
 require 'json'
@@ -10,7 +10,7 @@ require 'json'
 api_key = ENV.fetch('OPENAI_API_KEY', nil)
 abort 'Please set OPENAI_API_KEY' unless api_key
 
-# Create an MCP client (stdio stub for demo)
+# Create an MCPClient client (stdio stub for demo)
 mcp_client = MCPClient.create_client(
   mcp_server_configs: [MCPClient.stdio_config(command: 'npx @playwright/mcp@latest')]
 )
@@ -18,7 +18,7 @@ mcp_client = MCPClient.create_client(
 # Initialize the Ruby-OpenAI client
 client = OpenAI::Client.new(access_token: api_key)
 
-# Convert MCP tools to function specs
+# Convert MCPClient tools to function specs
 tools = mcp_client.to_openai_tools
 
 # Build initial chat messages
@@ -39,7 +39,7 @@ response = client.chat(
 # Extract the function call from the response
 tool_call = response.dig('choices', 0, 'message', 'tool_calls', 0)
 
-# 2) Invoke the MCP tool
+# 2) Invoke the MCPClient tool
 function_details = tool_call['function']
 name = function_details['name']
 args = JSON.parse(function_details['arguments'])
@@ -61,7 +61,7 @@ response = client.chat(
 # Extract the function call from the response
 tool_call = response.dig('choices', 0, 'message', 'tool_calls', 0)
 
-# 5) Invoke the next MCP tool
+# 5) Invoke the next MCPClient tool
 function_details = tool_call['function']
 name = function_details['name']
 args = JSON.parse(function_details['arguments'])
