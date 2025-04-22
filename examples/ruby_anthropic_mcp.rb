@@ -1,7 +1,7 @@
 #!/usr/bin/env ruby
 # frozen_string_literal: true
 # MCP integration example using the alexrudall/ruby-anthropic gem
-require_relative '../lib/mcp'
+require_relative '../lib/mcp_client'
 require 'anthropic'
 require 'json'
 
@@ -10,9 +10,9 @@ api_key = ENV['ANTHROPIC_API_KEY']
 abort "Please set ANTHROPIC_API_KEY" unless api_key
 
 # Create an MCP client (stdio stub for demo)
-mcp_client = MCP.create_client(
+mcp_client = MCPClient.create_client(
   mcp_server_configs: [
-    MCP.stdio_config(
+    MCPClient.stdio_config(
       command: %W[npx -y @modelcontextprotocol/server-filesystem #{Dir.pwd}]
     )
   ]

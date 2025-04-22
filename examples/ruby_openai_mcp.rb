@@ -1,7 +1,7 @@
 #!/usr/bin/env ruby
 # frozen_string_literal: true
 # MCP integration example using the alexrudall/ruby-openai gem
-require_relative '../lib/mcp'
+require_relative '../lib/mcp_client'
 require "openai"
 require 'json'
 
@@ -10,8 +10,8 @@ api_key = ENV['OPENAI_API_KEY']
 abort "Please set OPENAI_API_KEY" unless api_key
 
 # Create an MCP client (stdio stub for demo)
- mcp_client = MCP.create_client(
-  mcp_server_configs: [MCP.stdio_config(command: "npx @playwright/mcp@latest")]
+ mcp_client = MCPClient.create_client(
+  mcp_server_configs: [MCPClient.stdio_config(command: "npx @playwright/mcp@latest")]
  )
 
 # Initialize the Ruby-OpenAI client

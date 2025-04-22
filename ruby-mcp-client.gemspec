@@ -1,10 +1,10 @@
 # frozen_string_literal: true
 
-require_relative 'lib/mcp/version'
+require_relative 'lib/mcp_client/version'
 
 Gem::Specification.new do |spec|
   spec.name          = 'ruby-mcp-client'
-  spec.version       = MCP::VERSION
+  spec.version       = MCPClient::VERSION
   spec.authors       = ['Szymon Kurcab']
   spec.email         = ['szymon.kurcab@gmail.com']
 

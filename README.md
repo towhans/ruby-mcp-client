@@ -32,30 +32,36 @@ via different transport mechanisms:
 - **JSON-RPC over stdio**: e.g. the Playwright MCP CLI
 - **Server-Sent Events (SSE)**: Remote MCP servers over HTTP
 
-The core client resides in `MCP::Client` and provides helper methods for integrating
+The core client resides in `MCPClient::Client` and provides helper methods for integrating
 with popular AI services with built-in conversions:
 
 - `to_openai_tools()` - Formats tools for OpenAI API
 - `to_anthropic_tools()` - Formats tools for Anthropic Claude API
+
+> **Note**: For backward compatibility, the `MCP` namespace is still available as an alias for `MCPClient`.
 
 ## Usage
 
 ### Basic Client Usage
 
 ```ruby
-require 'mcp'
+require 'mcp_client'
 
-client = MCP.create_client(
+client = MCPClient.create_client(
   mcp_server_configs: [
     # Local stdio server
-    MCP.stdio_config(command: 'python path/to/mcp_server.py'),
+    MCPClient.stdio_config(command: 'python path/to/mcp_server.py'),
     # Remote HTTP SSE server
-    MCP.sse_config(
+    MCPClient.sse_config(
       base_url: 'https://api.example.com/mcp',
       headers: { 'Authorization' => 'Bearer YOUR_TOKEN' }
     )
   ]
 )
+
+# Or use the backward-compatible MCP namespace
+# require 'mcp'
+# client = MCP.create_client(...)
 
 # List available tools
 tools = client.list_tools

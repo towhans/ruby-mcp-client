@@ -1,6 +1,7 @@
 require 'bundler/setup'
 require 'rspec'
 $LOAD_PATH.unshift File.expand_path('../lib', __dir__)
+require 'mcp_client'
 require 'mcp'
 require 'webmock/rspec'
 require 'vcr'

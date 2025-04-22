@@ -1,46 +1,45 @@
 # frozen_string_literal: true
 
-# Load all MCP components
-require_relative "mcp/errors"
-require_relative "mcp/tool"
-require_relative "mcp/server_base"
-require_relative "mcp/server_stdio"
-require_relative "mcp/server_sse"
-require_relative "mcp/server_factory"
-require_relative "mcp/client"
+# Load the main module
+require_relative "mcp_client"
 
-# Model Context Protocol (MCP) module
-# Provides a standardized way for agents to communicate with external tools and services
-# through a protocol-based approach
+# This module exists for backward compatibility with code that used MCP instead of MCPClient
 module MCP
-  # Create a new MCP client
-  # @param mcp_server_configs [Array<Hash>] configurations for MCP servers
-  # @return [MCP::Client] new client instance
-  def self.create_client(mcp_server_configs: [])
-    MCP::Client.new(mcp_server_configs: mcp_server_configs)
+  # Forward all class methods to MCPClient
+  def self.method_missing(method_name, *args, **kwargs, &block)
+    if MCPClient.respond_to?(method_name)
+      MCPClient.send(method_name, *args, **kwargs, &block)
+    else
+      super
+    end
   end
 
-  # Create a standard server configuration for stdio
-  # @param command [String, Array<String>] command to execute
-  # @return [Hash] server configuration
-  def self.stdio_config(command:)
-    {
-      type: "stdio",
-      command: command
-    }
+  # Make sure respond_to? is consistent with method_missing
+  def self.respond_to_missing?(method_name, include_private = false)
+    MCPClient.respond_to?(method_name) || super
   end
 
-  # Create a standard server configuration for SSE
-  # @param base_url [String] base URL for the server
-  # @param headers [Hash] HTTP headers to include in requests
-  # @return [Hash] server configuration
-  def self.sse_config(base_url:, headers: {})
-    {
-      type: "sse",
-      base_url: base_url,
-      headers: headers
-    }
+  # VERSION needs to be accessible directly
+  VERSION = MCPClient::VERSION
+
+  # Define aliases for all the classes
+  Errors = MCPClient::Errors
+  Tool = MCPClient::Tool
+  Client = MCPClient::Client
+  ServerBase = MCPClient::ServerBase
+  ServerStdio = MCPClient::ServerStdio
+  ServerSSE = MCPClient::ServerSSE
+  ServerFactory = MCPClient::ServerFactory
+
+  # Make error classes available through the MCP namespace
+  module Errors
+    # Use constant_missing to delegate to MCPClient::Errors
+    def self.const_missing(name)
+      if MCPClient::Errors.const_defined?(name)
+        MCPClient::Errors.const_get(name)
+      else
+        super
+      end
+    end
   end
 end
-
-## Note: example integrations have been moved to the 'examples/' directory and are not auto-required

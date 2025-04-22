@@ -1,13 +1,13 @@
 require 'spec_helper'
 require 'pathname'
 
-RSpec.describe 'MCP integration with ruby-openai', :integration, vcr: { cassette_name: 'openai_mcp_integration' } do
+RSpec.describe 'MCPClient integration with ruby-openai', :integration, vcr: { cassette_name: 'openai_mcp_integration' } do
   let(:local_path) { Dir.pwd }
   let(:mcp_client) do
-    MCP.create_client(
+    MCPClient.create_client(
       mcp_server_configs: [
         # Use JSON-RPC stdio to communicate with the Node MCP filesystem server
-        MCP.stdio_config(
+        MCPClient.stdio_config(
           command: ["npx", "-y", "@modelcontextprotocol/server-filesystem", local_path]
         )
       ]
