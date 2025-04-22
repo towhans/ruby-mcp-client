@@ -29,7 +29,6 @@ MCP enables AI assistants and other services to discover and invoke external too
 via different transport mechanisms:
 
 - **Standard I/O**: Local processes implementing the MCP protocol
-- **JSON-RPC over stdio**: e.g. the Playwright MCP CLI
 - **Server-Sent Events (SSE)**: Remote MCP servers over HTTP
 
 The core client resides in `MCPClient::Client` and provides helper methods for integrating
@@ -37,8 +36,6 @@ with popular AI services with built-in conversions:
 
 - `to_openai_tools()` - Formats tools for OpenAI API
 - `to_anthropic_tools()` - Formats tools for Anthropic Claude API
-
-> **Note**: For backward compatibility, the `MCP` namespace is still available as an alias for `MCPClient`.
 
 ## Usage
 
@@ -50,7 +47,7 @@ require 'mcp_client'
 client = MCPClient.create_client(
   mcp_server_configs: [
     # Local stdio server
-    MCPClient.stdio_config(command: 'python path/to/mcp_server.py'),
+    MCPClient.stdio_config(command: 'npx -y @modelcontextprotocol/server-filesystem /home/user'),
     # Remote HTTP SSE server
     MCPClient.sse_config(
       base_url: 'https://api.example.com/mcp',
@@ -73,11 +70,111 @@ anthropic_tools = client.to_anthropic_tools
 client.cleanup
 ```
 
+### Integration Examples
+
+The repository includes examples for integrating with popular AI APIs:
+
+#### OpenAI Integration
+
+Ruby-MCP-Client works with both official and community OpenAI gems:
+
+```ruby
+# Using the openai/openai-ruby gem (official)
+require 'mcp_client'
+require 'openai'
+
+# Create MCP client
+mcp_client = MCPClient.create_client(
+  mcp_server_configs: [
+    MCPClient.stdio_config(
+      command: %W[npx -y @modelcontextprotocol/server-filesystem #{Dir.pwd}]
+    )
+  ]
+)
+
+# Convert tools to OpenAI format
+tools = mcp_client.to_openai_tools
+
+# Use with OpenAI client
+client = OpenAI::Client.new(api_key: ENV['OPENAI_API_KEY'])
+response = client.chat.completions.create(
+  model: 'gpt-4',
+  messages: [
+    { role: 'user', content: 'List files in current directory' }
+  ],
+  tools: tools
+)
+
+# Process tool calls and results
+# See examples directory for complete implementation
+```
+
+```ruby
+# Using the alexrudall/ruby-openai gem (community)
+require 'mcp_client'
+require 'openai'
+
+# Create MCP client
+mcp_client = MCPClient.create_client(
+  mcp_server_configs: [
+    MCPClient.stdio_config(command: 'npx @playwright/mcp@latest')
+  ]
+)
+
+# Convert tools to OpenAI format
+tools = mcp_client.to_openai_tools
+
+# Use with Ruby-OpenAI client
+client = OpenAI::Client.new(access_token: ENV['OPENAI_API_KEY'])
+# See examples directory for complete implementation
+```
+
+#### Anthropic Integration
+
+```ruby
+require 'mcp_client'
+require 'anthropic'
+
+# Create MCP client
+mcp_client = MCPClient.create_client(
+  mcp_server_configs: [
+    MCPClient.stdio_config(
+      command: %W[npx -y @modelcontextprotocol/server-filesystem #{Dir.pwd}]
+    )
+  ]
+)
+
+# Convert tools to Anthropic format
+claude_tools = mcp_client.to_anthropic_tools
+
+# Use with Anthropic client
+client = Anthropic::Client.new(access_token: ENV['ANTHROPIC_API_KEY'])
+# See examples directory for complete implementation
+```
+
+Complete examples can be found in the `examples/` directory:
+- `ruby_openai_mcp.rb` - Integration with alexrudall/ruby-openai gem
+- `openai_ruby_mcp.rb` - Integration with official openai/openai-ruby gem
+- `ruby_anthropic_mcp.rb` - Integration with alexrudall/ruby-anthropic gem
+
+## MCP Server Compatibility
+
+This client works with any MCP-compatible server, including:
+
+- [@modelcontextprotocol/server-filesystem](https://www.npmjs.com/package/@modelcontextprotocol/server-filesystem) - File system access
+- [@playwright/mcp](https://www.npmjs.com/package/@playwright/mcp) - Browser automation
+- Custom servers implementing the MCP protocol
+
+## Requirements
+
+- Ruby >= 2.7.0
+- No runtime dependencies
+
 ## Implementing an MCP Server
 
 To implement a compatible MCP server you must:
 
-- Listen on your chosen transport (stdio, JSON-RPC stdio, or HTTP SSE)
+- Listen on your chosen transport (JSON-RPC stdio, or HTTP SSE)
 - Respond to `list_tools` requests with a JSON list of tools
 - Respond to `call_tool` requests by executing the specified tool
 - Return results (or errors) in JSON format
@@ -100,6 +197,10 @@ Each tool is defined by a name, description, and a JSON Schema for its parameter
   }
 }
 ```
+
+## License
+
+This gem is available as open source under the [MIT License](LICENSE).
 
 ## Contributing
 
