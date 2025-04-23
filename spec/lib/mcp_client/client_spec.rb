@@ -74,6 +74,27 @@ RSpec.describe MCPClient::Client do
     end
   end
 
+  describe '#call_tools' do
+    let(:client) { described_class.new(mcp_server_configs: [{ type: 'stdio', command: 'test' }]) }
+    let(:tool_params1) { { param: 'value1' } }
+    let(:tool_params2) { { param: 'value2' } }
+    let(:tool_result) { { 'result' => 'success' } }
+    before do
+      allow(mock_server).to receive(:list_tools).and_return([mock_tool])
+      allow(mock_server).to receive(:call_tool).and_return(tool_result)
+    end
+
+    it 'calls each tool and returns an array of results' do
+      calls = [
+        { name: 'test_tool', parameters: tool_params1 },
+        { name: 'test_tool', parameters: tool_params2 }
+      ]
+      results = client.call_tools(calls)
+      expect(mock_server).to have_received(:call_tool).twice
+      expect(results).to eq([tool_result, tool_result])
+    end
+  end
+
   describe '#to_openai_tools' do
     let(:client) { described_class.new(mcp_server_configs: [{ type: 'stdio', command: 'test' }]) }
 

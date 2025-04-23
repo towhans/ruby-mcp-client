@@ -83,6 +83,17 @@ module MCPClient
       find_tools(pattern).first
     end
 
+    # Call multiple tools in batch
+    # @param calls [Array<Hash>] array of calls in the form { name: tool_name, parameters: {...} }
+    # @return [Array<Object>] array of results for each tool invocation
+    def call_tools(calls)
+      calls.map do |call|
+        name = call[:name] || call['name']
+        params = call[:parameters] || call['parameters'] || {}
+        call_tool(name, params)
+      end
+    end
+
     private
 
     def find_server_for_tool(tool)
