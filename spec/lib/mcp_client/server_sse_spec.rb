@@ -91,6 +91,10 @@ RSpec.describe MCPClient::ServerSSE do
         server.instance_variable_set(:@connection_established, true)
       end
 
+      allow(server).to receive(:perform_initialize) do
+        server.instance_variable_set(:@initialized, true)
+      end
+
       stub_request(:post, "#{base_url.sub(%r{/sse/?$}, '')}/messages")
         .with(
           headers: { 'Content-Type' => 'application/json' },
@@ -154,6 +158,10 @@ RSpec.describe MCPClient::ServerSSE do
     before do
       allow(server).to receive(:connect) do
         server.instance_variable_set(:@connection_established, true)
+      end
+
+      allow(server).to receive(:perform_initialize) do
+        server.instance_variable_set(:@initialized, true)
       end
 
       stub_request(:post, "#{base_url.sub(%r{/sse/?$}, '')}/messages")
@@ -223,6 +231,44 @@ RSpec.describe MCPClient::ServerSSE do
       server.cleanup
 
       expect(server.http_client).to be_nil
+    end
+  end
+
+  describe '#call_tool_streaming' do
+    let(:tool_name) { 'test_tool' }
+    let(:parameters) { { foo: 'bar' } }
+    let(:result) { { 'output' => 'success' } }
+
+    before do
+      allow(server).to receive(:connect) do
+        server.instance_variable_set(:@connection_established, true)
+      end
+
+      allow(server).to receive(:perform_initialize) do
+        server.instance_variable_set(:@initialized, true)
+      end
+
+      stub_request(:post, "#{base_url.sub(%r{/sse/?$}, '')}/messages")
+        .with(
+          headers: { 'Content-Type' => 'application/json' },
+          body: %r{tools/call.*#{tool_name}}
+        )
+        .to_return(
+          status: 200,
+          body: { result: result }.to_json,
+          headers: { 'Content-Type' => 'application/json' }
+        )
+    end
+
+    it 'returns an enumerator that yields the result of call_tool' do
+      expect(server).to receive(:call_tool).with(tool_name, parameters).and_return(result)
+
+      enumerator = server.call_tool_streaming(tool_name, parameters)
+      expect(enumerator).to be_a(Enumerator)
+
+      results = enumerator.to_a
+      expect(results.size).to eq(1)
+      expect(results.first).to eq(result)
     end
   end
 end

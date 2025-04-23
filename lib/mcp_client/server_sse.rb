@@ -11,7 +11,7 @@ module MCPClient
   # Implementation of MCP server that communicates via Server-Sent Events (SSE)
   # Useful for communicating with remote MCP servers over HTTP
   class ServerSSE < ServerBase
-    attr_reader :base_url, :tools, :session_id, :http_client
+    attr_reader :base_url, :tools, :session_id, :http_client, :server_info, :capabilities
 
     # @param base_url [String] The base URL of the MCP server
     # @param headers [Hash] Additional headers to include in requests
@@ -42,6 +42,7 @@ module MCPClient
       @sse_connected = false
       @connection_established = false
       @connection_cv = @mutex.new_cond
+      @initialized = false
     end
 
     # Stream tool call fallback for SSE transport (yields single result)
@@ -64,7 +65,7 @@ module MCPClient
         return @tools if @tools
       end
 
-      connect
+      ensure_initialized
 
       begin
         tools_data = request_tools_list
@@ -93,7 +94,7 @@ module MCPClient
     # @raise [MCPClient::Errors::TransportError] if response isn't valid JSON
     # @raise [MCPClient::Errors::ToolCallError] for other errors during tool execution
     def call_tool(tool_name, parameters)
-      connect
+      ensure_initialized
 
       begin
         request_id = @mutex.synchronize { @request_id += 1 }
@@ -180,6 +181,36 @@ module MCPClient
     end
 
     private
+
+    # Ensure handshake initialization has been performed
+    def ensure_initialized
+      return if @initialized
+
+      connect
+      perform_initialize
+      @initialized = true
+    end
+
+    # Perform JSON-RPC initialize handshake with the MCP server
+    def perform_initialize
+      request_id = @mutex.synchronize { @request_id += 1 }
+      json_rpc_request = {
+        jsonrpc: '2.0',
+        id: request_id,
+        method: 'initialize',
+        params: {
+          'protocolVersion' => MCPClient::VERSION,
+          'capabilities' => {},
+          'clientInfo' => { 'name' => 'ruby-mcp-client', 'version' => MCPClient::VERSION }
+        }
+      }
+      @logger.debug("Performing initialize RPC: #{json_rpc_request}")
+      result = send_jsonrpc_request(json_rpc_request)
+      return unless result.is_a?(Hash)
+
+      @server_info = result['serverInfo'] if result.key?('serverInfo')
+      @capabilities = result['capabilities'] if result.key?('capabilities')
+    end
 
     # Start the SSE thread to listen for events
     def start_sse_thread

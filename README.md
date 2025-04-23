@@ -55,6 +55,7 @@ client = MCPClient.create_client(
       read_timeout: 30, # Optional timeout in seconds (default: 30)
       retries: 3,       # Optional number of retry attempts (default: 0)
       retry_backoff: 1  # Optional backoff delay in seconds (default: 1)
+      # Native support for tool streaming via call_tool_streaming method
     )
   ]
 )
@@ -75,7 +76,8 @@ results = client.call_tools([
   { name: 'tool2', parameters: { key2: 'value2' } }
 ])
 
-# Stream results (for supported transports like SSE)
+# Stream results (supported by the SSE transport)
+# Returns an Enumerator that yields results as they become available
 client.call_tool_streaming('streaming_tool', { param: 'value' }).each do |chunk|
   # Process each chunk as it arrives
   puts chunk
@@ -196,7 +198,7 @@ The SSE client implementation provides these key features:
 - **Thread safety**: All operations are thread-safe using monitors and synchronized access
 - **Reliable error handling**: Comprehensive error handling for network issues, timeouts, and malformed responses
 - **JSON-RPC over SSE**: Full implementation of JSON-RPC 2.0 over SSE transport
-- **Streaming support**: Native streaming for real-time updates
+- **Streaming support**: Native streaming for real-time updates via the `call_tool_streaming` method, which returns an Enumerator for processing results as they arrive
 
 ## Requirements
 
