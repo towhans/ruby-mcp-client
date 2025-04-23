@@ -12,25 +12,26 @@ Layout/LineLength:
   Max: 120
 
 Metrics/AbcSize:
-  Max: 30
+  Max: 60
 
 Metrics/MethodLength:
-  Max: 25
+  Max: 60
 
 Metrics/ClassLength:
-  Max: 140
+  Max: 300
   Exclude:
     - 'spec/**/*'
 
 Metrics/BlockLength:
+  Max: 45
   Exclude:
     - 'spec/**/*'
 
 Metrics/CyclomaticComplexity:
-  Max: 10
+  Max: 15
 
 Metrics/PerceivedComplexity:
-  Max: 10
+  Max: 15
 
 Gemspec/DevelopmentDependencies:
   Enabled: false

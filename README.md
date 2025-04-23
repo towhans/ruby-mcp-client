@@ -50,8 +50,9 @@ client = MCPClient.create_client(
     MCPClient.stdio_config(command: 'npx -y @modelcontextprotocol/server-filesystem /home/user'),
     # Remote HTTP SSE server
     MCPClient.sse_config(
-      base_url: 'https://api.example.com/mcp',
-      headers: { 'Authorization' => 'Bearer YOUR_TOKEN' }
+      base_url: 'https://api.example.com/sse',
+      headers: { 'Authorization' => 'Bearer YOUR_TOKEN' },
+      read_timeout: 30 # Optional timeout in seconds (default: 30)
     )
   ]
 )
@@ -164,6 +165,15 @@ This client works with any MCP-compatible server, including:
 - [@modelcontextprotocol/server-filesystem](https://www.npmjs.com/package/@modelcontextprotocol/server-filesystem) - File system access
 - [@playwright/mcp](https://www.npmjs.com/package/@playwright/mcp) - Browser automation
 - Custom servers implementing the MCP protocol
+
+### Server-Sent Events (SSE) Implementation
+
+The SSE client implementation provides these key features:
+
+- **Robust connection handling**: Properly manages HTTP/HTTPS connections with configurable timeouts
+- **Thread safety**: All operations are thread-safe using monitors and synchronized access
+- **Reliable error handling**: Comprehensive error handling for network issues, timeouts, and malformed responses
+- **JSON-RPC over SSE**: Full implementation of JSON-RPC 2.0 over SSE transport
 
 ## Requirements
 

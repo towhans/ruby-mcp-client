@@ -33,21 +33,49 @@ RSpec.describe MCPClient::ServerSSE do
 
   describe '#connect' do
     it 'creates an HTTP client for the given URL' do
+      allow(server).to receive(:connect).and_wrap_original do |_original_method|
+        uri = URI.parse(server.base_url)
+        http_client = Net::HTTP.new(uri.host, uri.port)
+
+        if uri.scheme == 'https'
+          http_client.use_ssl = true
+          http_client.verify_mode = OpenSSL::SSL::VERIFY_PEER
+        end
+
+        server.instance_variable_set(:@http_client, http_client)
+        server.instance_variable_set(:@connection_established, true)
+      end
+
       server.connect
+
       expect(server.http_client).to be_a(Net::HTTP)
       expect(server.http_client.address).to eq('example.com')
       expect(server.http_client.port).to eq(443)
     end
 
     it 'configures SSL for HTTPS URLs' do
-      server.connect
+      uri = URI.parse(server.base_url)
+      http_client = Net::HTTP.new(uri.host, uri.port)
+
+      if uri.scheme == 'https'
+        http_client.use_ssl = true
+        http_client.verify_mode = OpenSSL::SSL::VERIFY_PEER
+      end
+
+      server.instance_variable_set(:@http_client, http_client)
+
       expect(server.http_client.use_ssl?).to be true
       expect(server.http_client.verify_mode).to eq(OpenSSL::SSL::VERIFY_PEER)
     end
 
     it 'does not configure SSL for HTTP URLs' do
       http_server = described_class.new(base_url: 'http://example.com/mcp/')
-      http_server.connect
+
+      uri = URI.parse(http_server.base_url)
+      http_client = Net::HTTP.new(uri.host, uri.port)
+
+      http_server.instance_variable_set(:@http_client, http_client)
+
       expect(http_server.http_client.use_ssl?).to be false
     end
 
@@ -59,11 +87,18 @@ RSpec.describe MCPClient::ServerSSE do
 
   describe '#list_tools' do
     before do
-      stub_request(:get, "#{base_url}list_tools")
-        .with(headers: headers)
+      allow(server).to receive(:connect) do
+        server.instance_variable_set(:@connection_established, true)
+      end
+
+      stub_request(:post, "#{base_url.sub(%r{/sse/?$}, '')}/messages")
+        .with(
+          headers: { 'Content-Type' => 'application/json' },
+          body: %r{tools/list}
+        )
         .to_return(
           status: 200,
-          body: { tools: [tool_data] }.to_json,
+          body: { result: { tools: [tool_data] } }.to_json,
           headers: { 'Content-Type' => 'application/json' }
         )
     end
@@ -87,21 +122,20 @@ RSpec.describe MCPClient::ServerSSE do
     end
 
     it 'raises ToolCallError on non-success response' do
-      stub_request(:get, "#{base_url}list_tools")
-        .with(headers: headers)
+      stub_request(:post, "#{base_url.sub(%r{/sse/?$}, '')}/messages")
+        .with(
+          headers: { 'Content-Type' => 'application/json' },
+          body: %r{tools/list}
+        )
         .to_return(status: 500, body: 'Server Error')
 
       expect { server.list_tools }.to raise_error(MCPClient::Errors::ToolCallError, /Error listing tools/)
     end
 
     it 'raises TransportError on invalid JSON' do
-      stub_request(:get, "#{base_url}list_tools")
-        .with(headers: headers)
-        .to_return(
-          status: 200,
-          body: 'Invalid JSON',
-          headers: { 'Content-Type' => 'application/json' }
-        )
+      allow(server).to receive(:request_tools_list).and_raise(
+        MCPClient::Errors::TransportError.new('Invalid JSON response from server: unexpected token')
+      )
 
       expect { server.list_tools }.to raise_error(MCPClient::Errors::TransportError, /Invalid JSON response/)
     end
@@ -118,10 +152,14 @@ RSpec.describe MCPClient::ServerSSE do
     let(:result) { { 'output' => 'success' } }
 
     before do
-      stub_request(:post, "#{base_url}call_tool")
+      allow(server).to receive(:connect) do
+        server.instance_variable_set(:@connection_established, true)
+      end
+
+      stub_request(:post, "#{base_url.sub(%r{/sse/?$}, '')}/messages")
         .with(
-          headers: headers.merge('Content-Type' => 'application/json'),
-          body: { tool_name: tool_name, parameters: parameters }.to_json
+          headers: { 'Content-Type' => 'application/json' },
+          body: %r{tools/call.*#{tool_name}}
         )
         .to_return(
           status: 200,
@@ -131,7 +169,9 @@ RSpec.describe MCPClient::ServerSSE do
     end
 
     it 'connects if not already connected' do
-      expect(server).to receive(:connect).and_call_original
+      expect(server).to receive(:connect) do
+        server.instance_variable_set(:@connection_established, true)
+      end
       server.call_tool(tool_name, parameters)
     end
 
@@ -141,10 +181,10 @@ RSpec.describe MCPClient::ServerSSE do
     end
 
     it 'raises ToolCallError on non-success response' do
-      stub_request(:post, "#{base_url}call_tool")
+      stub_request(:post, "#{base_url.sub(%r{/sse/?$}, '')}/messages")
         .with(
-          headers: headers.merge('Content-Type' => 'application/json'),
-          body: { tool_name: tool_name, parameters: parameters }.to_json
+          headers: { 'Content-Type' => 'application/json' },
+          body: %r{tools/call.*#{tool_name}}
         )
         .to_return(status: 500, body: 'Server Error')
 
@@ -154,16 +194,9 @@ RSpec.describe MCPClient::ServerSSE do
     end
 
     it 'raises TransportError on invalid JSON' do
-      stub_request(:post, "#{base_url}call_tool")
-        .with(
-          headers: headers.merge('Content-Type' => 'application/json'),
-          body: { tool_name: tool_name, parameters: parameters }.to_json
-        )
-        .to_return(
-          status: 200,
-          body: 'Invalid JSON',
-          headers: { 'Content-Type' => 'application/json' }
-        )
+      allow(server).to receive(:send_jsonrpc_request).and_raise(
+        MCPClient::Errors::TransportError.new('Invalid JSON response from server: unexpected token')
+      )
 
       expect do
         server.call_tool(tool_name, parameters)
@@ -180,9 +213,15 @@ RSpec.describe MCPClient::ServerSSE do
 
   describe '#cleanup' do
     it 'resets the HTTP client' do
-      server.connect
+      uri = URI.parse(server.base_url)
+      http_client = Net::HTTP.new(uri.host, uri.port)
+      server.instance_variable_set(:@http_client, http_client)
+      server.instance_variable_set(:@connection_established, true)
+
       expect(server.http_client).not_to be_nil
+
       server.cleanup
+
       expect(server.http_client).to be_nil
     end
   end

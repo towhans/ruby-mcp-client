@@ -13,7 +13,8 @@ module MCPClient
       when 'sse'
         MCPClient::ServerSSE.new(
           base_url: config[:base_url],
-          headers: config[:headers] || {}
+          headers: config[:headers] || {},
+          read_timeout: config[:read_timeout] || 30
         )
       else
         raise ArgumentError, "Unknown server type: #{config[:type]}"

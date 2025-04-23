@@ -34,12 +34,14 @@ module MCPClient
   # Create a standard server configuration for SSE
   # @param base_url [String] base URL for the server
   # @param headers [Hash] HTTP headers to include in requests
+  # @param read_timeout [Integer] read timeout in seconds (default: 30)
   # @return [Hash] server configuration
-  def self.sse_config(base_url:, headers: {})
+  def self.sse_config(base_url:, headers: {}, read_timeout: 30)
     {
       type: 'sse',
       base_url: base_url,
-      headers: headers
+      headers: headers,
+      read_timeout: read_timeout
     }
   end
 end

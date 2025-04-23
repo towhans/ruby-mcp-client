@@ -23,7 +23,7 @@ RSpec.describe MCPClient do
       url = 'https://example.com/'
       headers = { 'Authorization' => 'Bearer token' }
       cfg = MCPClient.sse_config(base_url: url, headers: headers)
-      expect(cfg).to eq(type: 'sse', base_url: url, headers: headers)
+      expect(cfg).to eq(type: 'sse', base_url: url, headers: headers, read_timeout: 30)
     end
   end
 end

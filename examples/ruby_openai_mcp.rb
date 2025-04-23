@@ -2,6 +2,8 @@
 # frozen_string_literal: true
 
 # MCPClient integration example using the alexrudall/ruby-openai gem
+# MCP server command:
+#  npx @playwright/mcp@latest --port 8931
 require_relative '../lib/mcp_client'
 require 'openai'
 require 'json'
@@ -10,15 +12,14 @@ require 'json'
 api_key = ENV.fetch('OPENAI_API_KEY', nil)
 abort 'Please set OPENAI_API_KEY' unless api_key
 
-# Create an MCPClient client (stdio stub for demo)
+# Create an MCPClient client (SSE server for demo)
 mcp_client = MCPClient.create_client(
-  mcp_server_configs: [MCPClient.stdio_config(command: 'npx @playwright/mcp@latest')]
+  mcp_server_configs: [MCPClient.sse_config(base_url: 'http://localhost:8931/sse')]
 )
 
 # Initialize the Ruby-OpenAI client
 client = OpenAI::Client.new(access_token: api_key)
 
-# Convert MCPClient tools to function specs
 tools = mcp_client.to_openai_tools
 
 # Build initial chat messages
