@@ -23,7 +23,11 @@ mcp_client = MCPClient::Client.new(
 # Initialize the Ruby-OpenAI client
 client = OpenAI::Client.new(access_token: api_key)
 
+# Get all tools
 tools = mcp_client.to_openai_tools
+
+# Or filter to only use specific tools (by exact name)
+# tools = mcp_client.to_openai_tools(tool_names: ['mcp__browser-tools__takeScreenshot'])
 
 # Build initial chat messages
 messages = [

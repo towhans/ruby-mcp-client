@@ -64,15 +64,21 @@ module MCPClient
     end
 
     # Convert MCP tools to OpenAI function specifications
+    # @param tool_names [Array<String>, nil] optional list of tool names to include, nil means all tools
     # @return [Array<Hash>] OpenAI function specifications
-    def to_openai_tools
-      list_tools.map(&:to_openai_tool)
+    def to_openai_tools(tool_names: nil)
+      tools = list_tools
+      tools = tools.select { |t| tool_names.include?(t.name) } if tool_names
+      tools.map(&:to_openai_tool)
     end
 
     # Convert MCP tools to Anthropic Claude tool specifications
+    # @param tool_names [Array<String>, nil] optional list of tool names to include, nil means all tools
     # @return [Array<Hash>] Anthropic Claude tool specifications
-    def to_anthropic_tools
-      list_tools.map(&:to_anthropic_tool)
+    def to_anthropic_tools(tool_names: nil)
+      tools = list_tools
+      tools = tools.select { |t| tool_names.include?(t.name) } if tool_names
+      tools.map(&:to_anthropic_tool)
     end
 
     # Clean up all server connections

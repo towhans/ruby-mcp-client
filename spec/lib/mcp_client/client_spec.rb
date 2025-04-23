@@ -96,19 +96,70 @@ RSpec.describe MCPClient::Client do
   end
 
   describe '#to_openai_tools' do
+    let(:other_tool) do
+      MCPClient::Tool.new(
+        name: 'other_tool',
+        description: 'Another test tool',
+        schema: { 'type' => 'object', 'properties' => {} }
+      )
+    end
     let(:client) { described_class.new(mcp_server_configs: [{ type: 'stdio', command: 'test' }]) }
 
     before do
-      allow(mock_server).to receive(:list_tools).and_return([mock_tool])
+      allow(mock_server).to receive(:list_tools).and_return([mock_tool, other_tool])
     end
 
     it 'converts tools to OpenAI function specs' do
       openai_tools = client.to_openai_tools
-      expect(openai_tools.size).to eq(1)
+      expect(openai_tools.size).to eq(2)
       # Function object format
       expect(openai_tools.first[:type]).to eq('function')
       expect(openai_tools.first[:function][:name]).to eq('test_tool')
       expect(openai_tools.first[:function][:parameters]).to eq(mock_tool.schema)
+    end
+
+    it 'filters tools by name when tool_names are provided' do
+      openai_tools = client.to_openai_tools(tool_names: ['other_tool'])
+      expect(openai_tools.size).to eq(1)
+      expect(openai_tools.first[:function][:name]).to eq('other_tool')
+    end
+
+    it 'returns empty array when no tools match the filter' do
+      openai_tools = client.to_openai_tools(tool_names: ['nonexistent_tool'])
+      expect(openai_tools).to be_empty
+    end
+  end
+
+  describe '#to_anthropic_tools' do
+    let(:other_tool) do
+      MCPClient::Tool.new(
+        name: 'other_tool',
+        description: 'Another test tool',
+        schema: { 'type' => 'object', 'properties' => {} }
+      )
+    end
+    let(:client) { described_class.new(mcp_server_configs: [{ type: 'stdio', command: 'test' }]) }
+
+    before do
+      allow(mock_server).to receive(:list_tools).and_return([mock_tool, other_tool])
+    end
+
+    it 'converts tools to Anthropic tool specs' do
+      anthropic_tools = client.to_anthropic_tools
+      expect(anthropic_tools.size).to eq(2)
+      expect(anthropic_tools.first[:name]).to eq('test_tool')
+      expect(anthropic_tools.first[:input_schema]).to eq(mock_tool.schema)
+    end
+
+    it 'filters tools by name when tool_names are provided' do
+      anthropic_tools = client.to_anthropic_tools(tool_names: ['other_tool'])
+      expect(anthropic_tools.size).to eq(1)
+      expect(anthropic_tools.first[:name]).to eq('other_tool')
+    end
+
+    it 'returns empty array when no tools match the filter' do
+      anthropic_tools = client.to_anthropic_tools(tool_names: ['nonexistent_tool'])
+      expect(anthropic_tools).to be_empty
     end
   end
 
