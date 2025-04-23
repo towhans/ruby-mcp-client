@@ -62,6 +62,12 @@ module MCPClient
       servers.each(&:cleanup)
     end
 
+    # Clear the cached tools so that next list_tools will fetch fresh data
+    # @return [void]
+    def clear_cache
+      @tool_cache.clear
+    end
+
     private
 
     def find_server_for_tool(tool)

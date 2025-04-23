@@ -67,6 +67,8 @@ result = client.call_tool('example_tool', { param1: 'value1', param2: 42 })
 openai_tools = client.to_openai_tools
 anthropic_tools = client.to_anthropic_tools
 
+# Clear cached tools to force fresh fetch on next list
+client.clear_cache
 # Clean up connections
 client.cleanup
 ```

@@ -103,4 +103,18 @@ RSpec.describe MCPClient::Client do
       expect(mock_server).to have_received(:cleanup)
     end
   end
+
+  describe '#clear_cache' do
+    let(:client) { described_class.new(mcp_server_configs: [{ type: 'stdio', command: 'test' }]) }
+    before do
+      allow(mock_server).to receive(:list_tools).and_return([mock_tool])
+    end
+
+    it 'clears the cache and refetches tools on next call' do
+      client.list_tools
+      client.clear_cache
+      client.list_tools
+      expect(mock_server).to have_received(:list_tools).twice
+    end
+  end
 end
