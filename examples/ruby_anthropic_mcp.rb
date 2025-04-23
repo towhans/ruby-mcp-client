@@ -11,12 +11,15 @@ api_key = ENV.fetch('ANTHROPIC_API_KEY', nil)
 abort 'Please set ANTHROPIC_API_KEY' unless api_key
 
 # Create an MCPClient client (stdio stub for demo)
-mcp_client = MCPClient.create_client(
+logger = Logger.new($stdout)
+logger.level = Logger::WARN
+mcp_client = MCPClient::Client.new(
   mcp_server_configs: [
     MCPClient.stdio_config(
       command: %W[npx -y @modelcontextprotocol/server-filesystem #{Dir.pwd}]
     )
-  ]
+  ],
+  logger: logger
 )
 
 # Initialize the Anthropic client

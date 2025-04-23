@@ -5,6 +5,7 @@ require 'net/http'
 require 'json'
 require 'openssl'
 require 'monitor'
+require 'logger'
 
 module MCPClient
   # Implementation of MCP server that communicates via Server-Sent Events (SSE)
@@ -15,8 +16,14 @@ module MCPClient
     # @param base_url [String] The base URL of the MCP server
     # @param headers [Hash] Additional headers to include in requests
     # @param read_timeout [Integer] Read timeout in seconds (default: 30)
-    def initialize(base_url:, headers: {}, read_timeout: 30)
+    # @param retries [Integer] number of retry attempts on transient errors
+    # @param retry_backoff [Numeric] base delay in seconds for exponential backoff
+    # @param logger [Logger, nil] optional logger
+    def initialize(base_url:, headers: {}, read_timeout: 30, retries: 0, retry_backoff: 1, logger: nil)
       super()
+      @logger = logger || Logger.new($stdout, level: Logger::WARN)
+      @max_retries = retries
+      @retry_backoff = retry_backoff
       @base_url = base_url.end_with?('/') ? base_url : "#{base_url}/"
       @headers = headers.merge({
                                  'Accept' => 'text/event-stream',
@@ -35,6 +42,16 @@ module MCPClient
       @sse_connected = false
       @connection_established = false
       @connection_cv = @mutex.new_cond
+    end
+
+    # Stream tool call fallback for SSE transport (yields single result)
+    # @param tool_name [String]
+    # @param parameters [Hash]
+    # @return [Enumerator]
+    def call_tool_streaming(tool_name, parameters)
+      Enumerator.new do |yielder|
+        yielder << call_tool(tool_name, parameters)
+      end
     end
 
     # List all tools available from the MCP server
@@ -201,6 +218,7 @@ module MCPClient
               end
 
               response.read_body do |chunk|
+                @logger.debug("SSE chunk received: #{chunk.inspect}")
                 process_sse_chunk(chunk.dup)
               end
             end
@@ -219,6 +237,7 @@ module MCPClient
     # Process an SSE chunk from the server
     # @param chunk [String] the chunk to process
     def process_sse_chunk(chunk)
+      @logger.debug("Processing SSE chunk: #{chunk.inspect}")
       local_buffer = nil
 
       @mutex.synchronize do
@@ -278,6 +297,7 @@ module MCPClient
     # @param event_data [String] the event data to parse
     # @return [Hash, nil] the parsed event, or nil if the event is invalid
     def parse_sse_event(event_data)
+      @logger.debug("Parsing SSE event data: #{event_data.inspect}")
       event = { event: 'message', data: '', id: nil }
       data_lines = []
 
@@ -295,6 +315,7 @@ module MCPClient
       end
 
       event[:data] = data_lines.join("\n")
+      @logger.debug("Parsed SSE event: #{event.inspect}")
       event[:data].empty? ? nil : event
     end
 
@@ -331,10 +352,31 @@ module MCPClient
       raise MCPClient::Errors::ToolCallError, 'Failed to get tools list from JSON-RPC request'
     end
 
+    # Helper: execute block with retry/backoff for transient errors
+    # @yield block to execute
+    # @return result of block
+    def with_retry
+      attempts = 0
+      begin
+        yield
+      rescue MCPClient::Errors::TransportError, MCPClient::Errors::ServerError, IOError, Errno::ETIMEDOUT,
+             Errno::ECONNRESET => e
+        attempts += 1
+        if attempts <= @max_retries
+          delay = @retry_backoff * (2**(attempts - 1))
+          @logger.debug("Retry attempt #{attempts} after error: #{e.message}, sleeping #{delay}s")
+          sleep(delay)
+          retry
+        end
+        raise
+      end
+    end
+
     # Send a JSON-RPC request to the server and wait for result
     # @param request [Hash] the JSON-RPC request
     # @return [Hash] the result of the request
     def send_jsonrpc_request(request)
+      @logger.debug("Sending JSON-RPC request: #{request.to_json}")
       uri = URI.parse(@base_url)
       rpc_http = Net::HTTP.new(uri.host, uri.port)
 
@@ -367,6 +409,7 @@ module MCPClient
                  .each { |k, v| http_request[k] = v }
 
           response = http.request(http_request)
+          @logger.debug("Received JSON-RPC response: #{response.code} #{response.body}")
 
           unless response.is_a?(Net::HTTPSuccess)
             raise MCPClient::Errors::ServerError, "Server returned error: #{response.code} #{response.message}"

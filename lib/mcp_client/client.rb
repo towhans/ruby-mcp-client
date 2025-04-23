@@ -1,13 +1,28 @@
 # frozen_string_literal: true
 
+require 'logger'
+
 module MCPClient
   # MCP Client for integrating with the Model Context Protocol
   # This is the main entry point for using MCP tools
   class Client
-    attr_reader :servers, :tool_cache
+    # @!attribute [r] servers
+    #   @return [Array<MCPClient::ServerBase>] list of servers
+    # @!attribute [r] tool_cache
+    #   @return [Hash<String, MCPClient::Tool>] cache of tools by name
+    # @!attribute [r] logger
+    #   @return [Logger] logger for client operations
+    attr_reader :servers, :tool_cache, :logger
 
-    def initialize(mcp_server_configs: [])
-      @servers = mcp_server_configs.map { |config| MCPClient::ServerFactory.create(config) }
+    # Initialize a new MCPClient::Client
+    # @param mcp_server_configs [Array<Hash>] configurations for MCP servers
+    # @param logger [Logger, nil] optional logger, defaults to STDOUT
+    def initialize(mcp_server_configs: [], logger: nil)
+      @logger = logger || Logger.new($stdout, level: Logger::WARN)
+      @servers = mcp_server_configs.map do |config|
+        @logger.debug("Creating server with config: #{config.inspect}")
+        MCPClient::ServerFactory.create(config)
+      end
       @tool_cache = {}
     end
 
@@ -37,6 +52,9 @@ module MCPClient
       tool = tools.find { |t| t.name == tool_name }
 
       raise MCPClient::Errors::ToolNotFound, "Tool '#{tool_name}' not found" unless tool
+
+      # Validate parameters against tool schema
+      validate_params!(tool, parameters)
 
       # Find the server that owns this tool
       server = find_server_for_tool(tool)
@@ -94,7 +112,49 @@ module MCPClient
       end
     end
 
+    # Stream call of a specific tool by name with the given parameters.
+    # Returns an Enumerator yielding streaming updates if supported.
+    # @param tool_name [String] the name of the tool to call
+    # @param parameters [Hash] the parameters to pass to the tool
+    # @return [Enumerator] streaming enumerator or single-value enumerator
+    def call_tool_streaming(tool_name, parameters)
+      tools = list_tools
+      tool = tools.find { |t| t.name == tool_name }
+      raise MCPClient::Errors::ToolNotFound, "Tool '#{tool_name}' not found" unless tool
+
+      # Validate parameters against tool schema
+      validate_params!(tool, parameters)
+      # Find the server that owns this tool
+      server = find_server_for_tool(tool)
+      raise MCPClient::Errors::ServerNotFound, "No server found for tool '#{tool_name}'" unless server
+
+      if server.respond_to?(:call_tool_streaming)
+        server.call_tool_streaming(tool_name, parameters)
+      else
+        Enumerator.new do |yielder|
+          yielder << server.call_tool(tool_name, parameters)
+        end
+      end
+    end
+
     private
+
+    # Validate parameters against tool JSON schema (checks required properties)
+    # @param tool [MCPClient::Tool] tool definition with schema
+    # @param parameters [Hash] parameters to validate
+    # @raise [MCPClient::Errors::ValidationError] when required params are missing
+    def validate_params!(tool, parameters)
+      schema = tool.schema
+      return unless schema.is_a?(Hash)
+
+      required = schema['required'] || schema[:required]
+      return unless required.is_a?(Array)
+
+      missing = required.map(&:to_s) - parameters.keys.map(&:to_s)
+      return unless missing.any?
+
+      raise MCPClient::Errors::ValidationError, "Missing required parameters: #{missing.join(', ')}"
+    end
 
     def find_server_for_tool(tool)
       servers.find do |server|

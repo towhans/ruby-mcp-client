@@ -13,8 +13,11 @@ api_key = ENV.fetch('OPENAI_API_KEY', nil)
 abort 'Please set OPENAI_API_KEY' unless api_key
 
 # Create an MCPClient client (SSE server for demo)
-mcp_client = MCPClient.create_client(
-  mcp_server_configs: [MCPClient.sse_config(base_url: 'http://localhost:8931/sse')]
+logger = Logger.new($stdout)
+logger.level = Logger::WARN
+mcp_client = MCPClient::Client.new(
+  mcp_server_configs: [MCPClient.sse_config(base_url: 'http://localhost:8931/sse')],
+  logger: logger
 )
 
 # Initialize the Ruby-OpenAI client

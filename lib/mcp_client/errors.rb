@@ -23,5 +23,7 @@ module MCPClient
 
     # Raised when there's an error in the MCP server transport
     class TransportError < MCPError; end
+    # Raised when tool parameters fail validation against JSON schema
+    class ValidationError < MCPError; end
   end
 end

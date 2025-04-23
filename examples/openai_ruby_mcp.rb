@@ -12,12 +12,15 @@ api_key = ENV.fetch('OPENAI_API_KEY', nil)
 abort 'Please set OPENAI_API_KEY' unless api_key
 
 # Create an MCPClient client (stdio stub for demo)
-mcp_client = MCPClient.create_client(
+logger = Logger.new($stdout)
+logger.level = Logger::WARN
+mcp_client = MCPClient::Client.new(
   mcp_server_configs: [
     MCPClient.stdio_config(
       command: %W[npx -y @modelcontextprotocol/server-filesystem #{Dir.pwd}]
     )
-  ]
+  ],
+  logger: logger
 )
 
 # Initialize the OpenAI client

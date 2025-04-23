@@ -167,4 +167,80 @@ RSpec.describe MCPClient::Client do
       expect(tool).to eq(other_tool)
     end
   end
+
+  describe '#call_tool validation' do
+    let(:schema_tool) do
+      MCPClient::Tool.new(
+        name: 'schema_tool',
+        description: 'Tool with required params',
+        schema: {
+          'type' => 'object',
+          'properties' => { 'a' => { 'type' => 'string' }, 'b' => { 'type' => 'string' } },
+          'required' => %w[a b]
+        }
+      )
+    end
+    let(:client) { described_class.new(mcp_server_configs: [{ type: 'stdio', command: 'test' }]) }
+
+    before do
+      allow(mock_server).to receive(:list_tools).and_return([schema_tool])
+      allow(mock_server).to receive(:call_tool)
+    end
+
+    it 'raises ValidationError when required parameters are missing' do
+      expect do
+        client.call_tool('schema_tool', { 'a' => 'foo' })
+      end.to raise_error(MCPClient::Errors::ValidationError, /Missing required parameters: b/)
+    end
+
+    it 'calls tool when all required parameters are provided' do
+      params = { 'a' => 'foo', 'b' => 'bar' }
+      client.call_tool('schema_tool', params)
+      expect(mock_server).to have_received(:call_tool).with('schema_tool', params)
+    end
+  end
+
+  describe '#call_tool_streaming' do
+    let(:stream_tool) do
+      MCPClient::Tool.new(
+        name: 'test_tool',
+        description: 'A test tool',
+        schema: {}
+      )
+    end
+    let(:client) { described_class.new(mcp_server_configs: [{ type: 'stdio', command: 'test' }]) }
+
+    before do
+      allow(mock_server).to receive(:list_tools).and_return([stream_tool])
+    end
+
+    context 'when server does not support streaming' do
+      before do
+        allow(mock_server).to receive(:call_tool).and_return('single_result')
+        allow(mock_server).to receive(:respond_to?).with(:call_tool_streaming).and_return(false)
+      end
+
+      it 'returns an Enumerator yielding the single result' do
+        enum = client.call_tool_streaming('test_tool', {})
+        expect(enum).to be_an(Enumerator)
+        expect(enum.to_a).to eq(['single_result'])
+      end
+    end
+
+    context 'when server supports streaming' do
+      let(:stream_enum) { [1, 2, 3].to_enum }
+      let(:mock_stream_server) do
+        double('server', list_tools: [stream_tool], call_tool_streaming: stream_enum)
+      end
+      before do
+        allow(MCPClient::ServerFactory).to receive(:create).and_return(mock_stream_server)
+      end
+
+      it 'delegates to server.call_tool_streaming' do
+        enum = client.call_tool_streaming('test_tool', {})
+        expect(enum).to eq(stream_enum)
+        expect(enum.to_a).to eq([1, 2, 3])
+      end
+    end
+  end
 end

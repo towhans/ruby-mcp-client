@@ -14,7 +14,19 @@ module MCPClient
         MCPClient::ServerSSE.new(
           base_url: config[:base_url],
           headers: config[:headers] || {},
-          read_timeout: config[:read_timeout] || 30
+          read_timeout: config[:read_timeout] || 30,
+          retries: config[:retries] || 0,
+          retry_backoff: config[:retry_backoff] || 1,
+          logger: config[:logger]
+        )
+      when 'http'
+        MCPClient::ServerHTTP.new(
+          base_url: config[:base_url],
+          headers: config[:headers] || {},
+          read_timeout: config[:read_timeout] || 30,
+          retries: config[:retries] || 0,
+          retry_backoff: config[:retry_backoff] || 1,
+          logger: config[:logger]
         )
       else
         raise ArgumentError, "Unknown server type: #{config[:type]}"

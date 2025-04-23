@@ -3,6 +3,7 @@
 require 'open3'
 require 'json'
 require_relative 'version'
+require 'logger'
 
 module MCPClient
   # JSON-RPC implementation of MCP server over stdio.
@@ -13,7 +14,10 @@ module MCPClient
     READ_TIMEOUT = 15
 
     # @param command [String, Array] the stdio command to launch the MCP JSON-RPC server
-    def initialize(command:)
+    # @param retries [Integer] number of retry attempts on transient errors
+    # @param retry_backoff [Numeric] base delay in seconds for exponential backoff
+    # @param logger [Logger, nil] optional logger
+    def initialize(command:, retries: 0, retry_backoff: 1, logger: nil)
       super()
       @command = command.is_a?(Array) ? command.join(' ') : command
       @mutex = Mutex.new
@@ -21,6 +25,9 @@ module MCPClient
       @next_id = 1
       @pending = {}
       @initialized = false
+      @logger = logger || Logger.new($stdout, level: Logger::WARN)
+      @max_retries = retries
+      @retry_backoff = retry_backoff
     end
 
     # Connect to the MCP server by launching the command process via stdout/stdin
@@ -49,6 +56,7 @@ module MCPClient
     # @param line [String] line of output to parse
     def handle_line(line)
       msg = JSON.parse(line)
+      @logger.debug("Received line: #{line.chomp}")
       id = msg['id']
       return unless id
 
@@ -173,6 +181,7 @@ module MCPClient
     end
 
     def send_request(req)
+      @logger.debug("Sending JSONRPC request: #{req.to_json}")
       @stdin.puts(req.to_json)
     rescue StandardError => e
       raise MCPClient::Errors::TransportError, "Failed to send JSONRPC request: #{e.message}"
@@ -192,6 +201,16 @@ module MCPClient
         raise MCPClient::Errors::TransportError, "Timeout waiting for JSONRPC response id=#{id}" unless msg
 
         msg
+      end
+    end
+
+    # Stream tool call fallback for stdio transport (yields single result)
+    # @param tool_name [String]
+    # @param parameters [Hash]
+    # @return [Enumerator]
+    def call_tool_streaming(tool_name, parameters)
+      Enumerator.new do |yielder|
+        yielder << call_tool(tool_name, parameters)
       end
     end
   end

@@ -29,7 +29,8 @@ MCP enables AI assistants and other services to discover and invoke external too
 via different transport mechanisms:
 
 - **Standard I/O**: Local processes implementing the MCP protocol
-- **Server-Sent Events (SSE)**: Remote MCP servers over HTTP
+- **Server-Sent Events (SSE)**: Remote MCP servers over HTTP with streaming support
+- **HTTP JSON-RPC**: Remote MCP servers over standard HTTP
 
 The core client resides in `MCPClient::Client` and provides helper methods for integrating
 with popular AI services with built-in conversions:
@@ -48,11 +49,19 @@ client = MCPClient.create_client(
   mcp_server_configs: [
     # Local stdio server
     MCPClient.stdio_config(command: 'npx -y @modelcontextprotocol/server-filesystem /home/user'),
-    # Remote HTTP SSE server
+    # Remote HTTP SSE server (with streaming support)
     MCPClient.sse_config(
       base_url: 'https://api.example.com/sse',
       headers: { 'Authorization' => 'Bearer YOUR_TOKEN' },
       read_timeout: 30 # Optional timeout in seconds (default: 30)
+    ),
+    # Remote HTTP JSON-RPC server
+    MCPClient.http_config(
+      base_url: 'https://api.example.com/jsonrpc',
+      headers: { 'Authorization' => 'Bearer YOUR_TOKEN' },
+      read_timeout: 30, # Optional timeout in seconds (default: 30)
+      retries: 3,       # Optional number of retry attempts (default: 0)
+      retry_backoff: 1  # Optional backoff delay in seconds (default: 1)
     )
   ]
 )
@@ -60,8 +69,24 @@ client = MCPClient.create_client(
 # List available tools
 tools = client.list_tools
 
+# Find tools by name pattern (string or regex)
+file_tools = client.find_tools('file')
+first_tool = client.find_tool(/^file_/)
+
 # Call a specific tool by name
 result = client.call_tool('example_tool', { param1: 'value1', param2: 42 })
+
+# Call multiple tools in batch
+results = client.call_tools([
+  { name: 'tool1', parameters: { key1: 'value1' } },
+  { name: 'tool2', parameters: { key2: 'value2' } }
+])
+
+# Stream results (for supported transports like SSE)
+client.call_tool_streaming('streaming_tool', { param: 'value' }).each do |chunk|
+  # Process each chunk as it arrives
+  puts chunk
+end
 
 # Format tools for specific AI services
 openai_tools = client.to_openai_tools
@@ -168,6 +193,8 @@ This client works with any MCP-compatible server, including:
 - [@playwright/mcp](https://www.npmjs.com/package/@playwright/mcp) - Browser automation
 - Custom servers implementing the MCP protocol
 
+### Server Implementation Features
+
 ### Server-Sent Events (SSE) Implementation
 
 The SSE client implementation provides these key features:
@@ -176,6 +203,16 @@ The SSE client implementation provides these key features:
 - **Thread safety**: All operations are thread-safe using monitors and synchronized access
 - **Reliable error handling**: Comprehensive error handling for network issues, timeouts, and malformed responses
 - **JSON-RPC over SSE**: Full implementation of JSON-RPC 2.0 over SSE transport
+- **Streaming support**: Native streaming for real-time updates
+
+### HTTP JSON-RPC Implementation
+
+The HTTP client implementation provides these key features:
+
+- **Resilient connection handling**: Manages HTTP/HTTPS connections with configurable timeouts
+- **Retry mechanism**: Configurable retry attempts with exponential backoff for transient errors
+- **Error handling**: Comprehensive error handling for network issues, timeouts, and malformed responses
+- **JSON-RPC over HTTP**: Standard JSON-RPC 2.0 implementation
 
 ## Requirements
 
