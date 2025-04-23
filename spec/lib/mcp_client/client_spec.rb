@@ -117,4 +117,33 @@ RSpec.describe MCPClient::Client do
       expect(mock_server).to have_received(:list_tools).twice
     end
   end
+
+  describe 'convenience methods: #find_tools and #find_tool' do
+    let(:other_tool) do
+      MCPClient::Tool.new(
+        name: 'another_tool',
+        description: 'Another test tool',
+        schema: { 'type' => 'object', 'properties' => {} }
+      )
+    end
+    let(:client) { described_class.new(mcp_server_configs: [{ type: 'stdio', command: 'test' }]) }
+    before do
+      allow(mock_server).to receive(:list_tools).and_return([mock_tool, other_tool])
+    end
+
+    it 'returns tools matching a string pattern' do
+      matches = client.find_tools('test')
+      expect(matches).to contain_exactly(mock_tool)
+    end
+
+    it 'returns tools matching a Regexp pattern' do
+      matches = client.find_tools(/another_/)
+      expect(matches).to contain_exactly(other_tool)
+    end
+
+    it 'find_tool returns the first matching tool' do
+      tool = client.find_tool(/another_/)
+      expect(tool).to eq(other_tool)
+    end
+  end
 end

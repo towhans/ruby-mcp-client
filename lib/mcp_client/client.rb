@@ -68,6 +68,21 @@ module MCPClient
       @tool_cache.clear
     end
 
+    # Find all tools whose name matches the given pattern (String or Regexp)
+    # @param pattern [String, Regexp] pattern to match tool names
+    # @return [Array<MCPClient::Tool>] matching tools
+    def find_tools(pattern)
+      rx = pattern.is_a?(Regexp) ? pattern : /#{Regexp.escape(pattern)}/
+      list_tools.select { |t| t.name.match(rx) }
+    end
+
+    # Find the first tool whose name matches the given pattern
+    # @param pattern [String, Regexp] pattern to match tool names
+    # @return [MCPClient::Tool, nil]
+    def find_tool(pattern)
+      find_tools(pattern).first
+    end
+
     private
 
     def find_server_for_tool(tool)
