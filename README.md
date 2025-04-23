@@ -30,7 +30,6 @@ via different transport mechanisms:
 
 - **Standard I/O**: Local processes implementing the MCP protocol
 - **Server-Sent Events (SSE)**: Remote MCP servers over HTTP with streaming support
-- **HTTP JSON-RPC**: Remote MCP servers over standard HTTP
 
 The core client resides in `MCPClient::Client` and provides helper methods for integrating
 with popular AI services with built-in conversions:
@@ -52,12 +51,6 @@ client = MCPClient.create_client(
     # Remote HTTP SSE server (with streaming support)
     MCPClient.sse_config(
       base_url: 'https://api.example.com/sse',
-      headers: { 'Authorization' => 'Bearer YOUR_TOKEN' },
-      read_timeout: 30 # Optional timeout in seconds (default: 30)
-    ),
-    # Remote HTTP JSON-RPC server
-    MCPClient.http_config(
-      base_url: 'https://api.example.com/jsonrpc',
       headers: { 'Authorization' => 'Bearer YOUR_TOKEN' },
       read_timeout: 30, # Optional timeout in seconds (default: 30)
       retries: 3,       # Optional number of retry attempts (default: 0)
@@ -204,15 +197,6 @@ The SSE client implementation provides these key features:
 - **Reliable error handling**: Comprehensive error handling for network issues, timeouts, and malformed responses
 - **JSON-RPC over SSE**: Full implementation of JSON-RPC 2.0 over SSE transport
 - **Streaming support**: Native streaming for real-time updates
-
-### HTTP JSON-RPC Implementation
-
-The HTTP client implementation provides these key features:
-
-- **Resilient connection handling**: Manages HTTP/HTTPS connections with configurable timeouts
-- **Retry mechanism**: Configurable retry attempts with exponential backoff for transient errors
-- **Error handling**: Comprehensive error handling for network issues, timeouts, and malformed responses
-- **JSON-RPC over HTTP**: Standard JSON-RPC 2.0 implementation
 
 ## Requirements
 

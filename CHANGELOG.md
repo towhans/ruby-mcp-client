@@ -1,5 +1,10 @@
 # Changelog
 
+## 0.3.0 (2025-04-23)
+
+- Removed HTTP server implementation
+- Code cleanup
+
 ## 0.2.0 (2025-04-23)
 
 - Client schema validation
