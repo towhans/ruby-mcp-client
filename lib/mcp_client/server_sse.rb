@@ -22,6 +22,8 @@ module MCPClient
     def initialize(base_url:, headers: {}, read_timeout: 30, retries: 0, retry_backoff: 1, logger: nil)
       super()
       @logger = logger || Logger.new($stdout, level: Logger::WARN)
+      @logger.progname = self.class.name
+      @logger.formatter = proc { |severity, _datetime, progname, msg| "#{severity} [#{progname}] #{msg}\n" }
       @max_retries = retries
       @retry_backoff = retry_backoff
       @base_url = base_url.end_with?('/') ? base_url : "#{base_url}/"
@@ -186,9 +188,11 @@ module MCPClient
     # @return [Object] result from JSON-RPC response
     def rpc_request(method, params = {})
       ensure_initialized
-      request_id = @mutex.synchronize { @request_id += 1 }
-      request = { jsonrpc: '2.0', id: request_id, method: method, params: params }
-      send_jsonrpc_request(request)
+      with_retry do
+        request_id = @mutex.synchronize { @request_id += 1 }
+        request = { jsonrpc: '2.0', id: request_id, method: method, params: params }
+        send_jsonrpc_request(request)
+      end
     end
 
     # Send a JSON-RPC notification (no response expected)

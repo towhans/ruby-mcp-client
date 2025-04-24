@@ -16,8 +16,9 @@ module MCPClient
     # @param command [String, Array] the stdio command to launch the MCP JSON-RPC server
     # @param retries [Integer] number of retry attempts on transient errors
     # @param retry_backoff [Numeric] base delay in seconds for exponential backoff
+    # @param read_timeout [Numeric] timeout in seconds for reading responses
     # @param logger [Logger, nil] optional logger
-    def initialize(command:, retries: 0, retry_backoff: 1, logger: nil)
+    def initialize(command:, retries: 0, retry_backoff: 1, read_timeout: READ_TIMEOUT, logger: nil)
       super()
       @command = command.is_a?(Array) ? command.join(' ') : command
       @mutex = Mutex.new
@@ -26,8 +27,11 @@ module MCPClient
       @pending = {}
       @initialized = false
       @logger = logger || Logger.new($stdout, level: Logger::WARN)
+      @logger.progname = self.class.name
+      @logger.formatter = proc { |severity, _datetime, progname, msg| "#{severity} [#{progname}] #{msg}\n" }
       @max_retries = retries
       @retry_backoff = retry_backoff
+      @read_timeout = read_timeout
     end
 
     # Connect to the MCP server by launching the command process via stdout/stdin
@@ -194,7 +198,7 @@ module MCPClient
     end
 
     def wait_response(id)
-      deadline = Time.now + READ_TIMEOUT
+      deadline = Time.now + @read_timeout
       @mutex.synchronize do
         until @pending.key?(id)
           remaining = deadline - Time.now
@@ -226,15 +230,28 @@ module MCPClient
     # @return [Object] result from JSON-RPC response
     def rpc_request(method, params = {})
       ensure_initialized
-      req_id = next_id
-      req = { 'jsonrpc' => '2.0', 'id' => req_id, 'method' => method, 'params' => params }
-      send_request(req)
-      res = wait_response(req_id)
-      if (err = res['error'])
-        raise MCPClient::Errors::ServerError, err['message']
-      end
+      attempts = 0
+      begin
+        req_id = next_id
+        req = { 'jsonrpc' => '2.0', 'id' => req_id, 'method' => method, 'params' => params }
+        send_request(req)
+        res = wait_response(req_id)
+        if (err = res['error'])
+          raise MCPClient::Errors::ServerError, err['message']
+        end
 
-      res['result']
+        res['result']
+      rescue MCPClient::Errors::ServerError, MCPClient::Errors::TransportError, IOError, Errno::ETIMEDOUT,
+             Errno::ECONNRESET => e
+        attempts += 1
+        if attempts <= @max_retries
+          delay = @retry_backoff * (2**(attempts - 1))
+          @logger.debug("Retry attempt #{attempts} after error: #{e.message}, sleeping #{delay}s")
+          sleep(delay)
+          retry
+        end
+        raise
+      end
     end
 
     # Send a JSON-RPC notification (no response expected)

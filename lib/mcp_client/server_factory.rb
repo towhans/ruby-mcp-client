@@ -9,7 +9,13 @@ module MCPClient
     def self.create(config)
       case config[:type]
       when 'stdio'
-        MCPClient::ServerStdio.new(command: config[:command])
+        MCPClient::ServerStdio.new(
+          command: config[:command],
+          retries: config[:retries] || 0,
+          retry_backoff: config[:retry_backoff] || 1,
+          read_timeout: config[:read_timeout] || MCPClient::ServerStdio::READ_TIMEOUT,
+          logger: config[:logger]
+        )
       when 'sse'
         MCPClient::ServerSSE.new(
           base_url: config[:base_url],

@@ -19,6 +19,8 @@ module MCPClient
     # @param logger [Logger, nil] optional logger, defaults to STDOUT
     def initialize(mcp_server_configs: [], logger: nil)
       @logger = logger || Logger.new($stdout, level: Logger::WARN)
+      @logger.progname = self.class.name
+      @logger.formatter = proc { |severity, _datetime, progname, msg| "#{severity} [#{progname}] #{msg}\n" }
       @servers = mcp_server_configs.map do |config|
         @logger.debug("Creating server with config: #{config.inspect}")
         MCPClient::ServerFactory.create(config)
