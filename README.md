@@ -94,6 +94,11 @@ client.on_notification do |server, method, params|
   # 'notifications/tools/list_changed' is handled automatically by the client
 end
 
+# Send custom JSON-RPC requests or notifications
+client.send_rpc('custom_method', params: { key: 'value' }, server: :sse) # Uses specific server
+result = client.send_rpc('another_method', params: { data: 123 }) # Uses first available server
+client.send_notification('status_update', params: { status: 'ready' })
+
 # Clear cached tools to force fresh fetch on next list
 client.clear_cache
 # Clean up connections
@@ -201,12 +206,15 @@ This client works with any MCP-compatible server, including:
 
 The SSE client implementation provides these key features:
 
-- **Robust connection handling**: Properly manages HTTP/HTTPS connections with configurable timeouts
+- **Robust connection handling**: Properly manages HTTP/HTTPS connections with configurable timeouts and retries
 - **Thread safety**: All operations are thread-safe using monitors and synchronized access
 - **Reliable error handling**: Comprehensive error handling for network issues, timeouts, and malformed responses
-- **JSON-RPC over SSE**: Full implementation of JSON-RPC 2.0 over SSE transport
+- **JSON-RPC over SSE**: Full implementation of JSON-RPC 2.0 over SSE transport with initialize handshake
 - **Streaming support**: Native streaming for real-time updates via the `call_tool_streaming` method, which returns an Enumerator for processing results as they arrive
 - **Notification support**: Built-in handling for JSON-RPC notifications with automatic tool cache invalidation and custom notification callback support
+- **Custom RPC methods**: Send any custom JSON-RPC method or notification through `send_rpc` and `send_notification`
+- **Configurable retries**: All RPC requests support configurable retries with exponential backoff
+- **Consistent logging**: Tagged, leveled logging across all components for better debugging
 
 ## Requirements
 

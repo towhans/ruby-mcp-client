@@ -1,5 +1,30 @@
 # Changelog
 
+## 0.4.0 (2025-04-23)
+
+- Added full "initialize" hand-shake support to the SSE transport
+  - Added an @initialized flag and ensure_initialized helper
+  - Hooked into list_tools and call_tool for JSON-RPC "initialize" to be sent once
+  - Implemented perform_initialize to send the RPC, capture server info and capabilities
+  - Exposed server_info and capabilities readers on ServerSSE
+
+- Added JSON-RPC notifications dispatcher
+  - ServerBase#on_notification to register blocks for incoming JSON-RPC notifications
+  - ServerStdio and ServerSSE now detect notification messages and invoke callbacks
+  - Client#on_notification to register client-level listeners
+  - Automatic tool cache invalidation on "notifications/tools/list_changed"
+
+- Added generic JSON-RPC methods to both transports
+  - ServerBase: abstract rpc_request/rpc_notify
+  - ServerStdio: rpc_request for blocking request/response, rpc_notify for notifications
+  - ServerSSE: rpc_request via HTTP POST, rpc_notify to SSE messages endpoint
+  - Client: send_rpc and send_notification methods for client-side JSON-RPC dispatch
+
+- Added timeout & retry configurability with improved logging
+  - Per-call timeouts & retries for both transports
+  - Tagged, leveled logging across all components
+  - Consistent retry and logging functionality
+
 ## 0.3.0 (2025-04-23)
 
 - Removed HTTP server implementation
