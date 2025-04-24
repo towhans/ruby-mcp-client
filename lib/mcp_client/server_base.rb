@@ -45,6 +45,13 @@ module MCPClient
       raise NotImplementedError, 'Subclasses must implement rpc_notify'
     end
 
+    # Ping the MCP server to check connectivity
+    # @param params [Hash] optional parameters for the ping request
+    # @return [Object] result from the ping request
+    def ping(params = {})
+      rpc_request('ping', params)
+    end
+
     # Register a callback to receive JSON-RPC notifications
     # @yield [method, params] invoked when a notification is received
     # @return [void]

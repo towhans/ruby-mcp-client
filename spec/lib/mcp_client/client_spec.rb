@@ -296,4 +296,72 @@ RSpec.describe MCPClient::Client do
       end
     end
   end
+
+  describe '#ping' do
+    let(:client) { described_class.new(mcp_server_configs: [{ type: 'stdio', command: 'test' }]) }
+    let(:ping_result) { { 'status' => 'ok' } }
+
+    before do
+      allow(mock_server).to receive(:ping).and_return(ping_result)
+    end
+
+    it 'pings the first server by default' do
+      result = client.ping
+      expect(mock_server).to have_received(:ping).with({})
+      expect(result).to eq(ping_result)
+    end
+
+    it 'passes parameters to the server ping method' do
+      params = { echo: 'hello' }
+      client.ping(params)
+      expect(mock_server).to have_received(:ping).with(params)
+    end
+
+    it 'pings a specific server when server_index is provided' do
+      client.ping({}, server_index: 0)
+      expect(mock_server).to have_received(:ping)
+    end
+
+    it 'raises ServerNotFound when no servers are available' do
+      empty_client = described_class.new(mcp_server_configs: [])
+      expect { empty_client.ping }.to raise_error(MCPClient::Errors::ServerNotFound, 'No server available for ping')
+    end
+
+    it 'raises ServerNotFound when invalid server_index is provided' do
+      expect do
+        client.ping({}, server_index: 1)
+      end.to raise_error(MCPClient::Errors::ServerNotFound, 'Server at index 1 not found')
+    end
+
+    context 'with multiple servers' do
+      let(:mock_server2) { instance_double(MCPClient::ServerBase) }
+      let(:multi_client) do
+        client = described_class.new(mcp_server_configs: [
+                                       { type: 'stdio', command: 'test1' },
+                                       { type: 'stdio', command: 'test2' }
+                                     ])
+        # Replace the servers with our doubles
+        client.instance_variable_set(:@servers, [mock_server, mock_server2])
+        client
+      end
+
+      before do
+        allow(mock_server2).to receive(:ping).and_return({ 'status' => 'ok', 'server' => '2' })
+        allow(mock_server2).to receive(:on_notification)
+      end
+
+      it 'pings the first server by default' do
+        multi_client.ping
+        expect(mock_server).to have_received(:ping)
+        expect(mock_server2).not_to have_received(:ping)
+      end
+
+      it 'pings the specified server when server_index is provided' do
+        result = multi_client.ping({}, server_index: 1)
+        expect(mock_server).not_to have_received(:ping)
+        expect(mock_server2).to have_received(:ping)
+        expect(result).to eq({ 'status' => 'ok', 'server' => '2' })
+      end
+    end
+  end
 end

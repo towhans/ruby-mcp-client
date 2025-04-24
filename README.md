@@ -99,6 +99,11 @@ client.send_rpc('custom_method', params: { key: 'value' }, server: :sse) # Uses 
 result = client.send_rpc('another_method', params: { data: 123 }) # Uses first available server
 client.send_notification('status_update', params: { status: 'ready' })
 
+# Check server connectivity 
+client.ping # Basic connectivity check
+client.ping({ echo: "hello" }) # With optional parameters 
+client.ping({}, server_index: 1) # Ping a specific server by index
+
 # Clear cached tools to force fresh fetch on next list
 client.clear_cache
 # Clean up connections
@@ -215,6 +220,9 @@ The SSE client implementation provides these key features:
 - **Custom RPC methods**: Send any custom JSON-RPC method or notification through `send_rpc` and `send_notification`
 - **Configurable retries**: All RPC requests support configurable retries with exponential backoff
 - **Consistent logging**: Tagged, leveled logging across all components for better debugging
+- **Graceful fallbacks**: Automatic fallback to synchronous HTTP when SSE connection fails
+- **URL normalization**: Consistent URL handling that respects user-provided formats
+- **Server connectivity check**: Built-in `ping` method to test server connectivity and health
 
 ## Requirements
 
