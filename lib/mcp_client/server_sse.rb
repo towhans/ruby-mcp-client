@@ -180,6 +180,50 @@ module MCPClient
       end
     end
 
+    # Generic JSON-RPC request: send method with params and return result
+    # @param method [String] JSON-RPC method name
+    # @param params [Hash] parameters for the request
+    # @return [Object] result from JSON-RPC response
+    def rpc_request(method, params = {})
+      ensure_initialized
+      request_id = @mutex.synchronize { @request_id += 1 }
+      request = { jsonrpc: '2.0', id: request_id, method: method, params: params }
+      send_jsonrpc_request(request)
+    end
+
+    # Send a JSON-RPC notification (no response expected)
+    # @param method [String] JSON-RPC method name
+    # @param params [Hash] parameters for the notification
+    # @return [void]
+    def rpc_notify(method, params = {})
+      ensure_initialized
+      url_base = @base_url.sub(%r{/sse/?$}, '')
+      uri = URI.parse("#{url_base}/messages?sessionId=#{@session_id}")
+      rpc_http = Net::HTTP.new(uri.host, uri.port)
+      if uri.scheme == 'https'
+        rpc_http.use_ssl = true
+        rpc_http.verify_mode = OpenSSL::SSL::VERIFY_PEER
+      end
+      rpc_http.open_timeout = 10
+      rpc_http.read_timeout = @read_timeout
+      rpc_http.keep_alive_timeout = 60
+      rpc_http.start do |http|
+        http_req = Net::HTTP::Post.new(uri)
+        http_req.content_type = 'application/json'
+        http_req.body = { jsonrpc: '2.0', method: method, params: params }.to_json
+        headers = @headers.dup
+        headers.except('Accept', 'Cache-Control').each { |k, v| http_req[k] = v }
+        response = http.request(http_req)
+        unless response.is_a?(Net::HTTPSuccess)
+          raise MCPClient::Errors::ServerError, "Notification failed: #{response.code} #{response.message}"
+        end
+      end
+    rescue StandardError => e
+      raise MCPClient::Errors::TransportError, "Failed to send notification: #{e.message}"
+    ensure
+      rpc_http.finish if rpc_http&.started?
+    end
+
     private
 
     # Ensure handshake initialization has been performed
@@ -303,6 +347,11 @@ module MCPClient
       when 'message'
         begin
           data = JSON.parse(event[:data])
+          # Dispatch JSON-RPC notifications (no id, has method)
+          if data['method'] && !data.key?('id')
+            @notification_callback&.call(data['method'], data['params'])
+            return
+          end
 
           @mutex.synchronize do
             @tools_data = data['result']['tools'] if data['result'] && data['result']['tools']

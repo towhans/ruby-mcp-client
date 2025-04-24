@@ -24,6 +24,17 @@ module MCPClient
         MCPClient::ServerFactory.create(config)
       end
       @tool_cache = {}
+      # JSON-RPC notification listeners
+      @notification_listeners = []
+      # Register default and user-defined notification handlers on each server
+      @servers.each do |server|
+        server.on_notification do |method, params|
+          # Default handling: clear tool cache on tools list change
+          clear_cache if method == 'notifications/tools/list_changed'
+          # Invoke user listeners
+          @notification_listeners.each { |cb| cb.call(server, method, params) }
+        end
+      end
     end
 
     # Lists all available tools from all connected MCP servers
@@ -90,6 +101,13 @@ module MCPClient
     # @return [void]
     def clear_cache
       @tool_cache.clear
+    end
+
+    # Register a callback for JSON-RPC notifications from servers
+    # @yield [server, method, params]
+    # @return [void]
+    def on_notification(&block)
+      @notification_listeners << block
     end
 
     # Find all tools whose name matches the given pattern (String or Regexp)

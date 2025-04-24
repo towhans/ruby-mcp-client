@@ -57,6 +57,12 @@ module MCPClient
     def handle_line(line)
       msg = JSON.parse(line)
       @logger.debug("Received line: #{line.chomp}")
+      # Dispatch JSON-RPC notifications (no id, has method)
+      if msg['method'] && !msg.key?('id')
+        @notification_callback&.call(msg['method'], msg['params'])
+        return
+      end
+      # Handle standard JSON-RPC responses
       id = msg['id']
       return unless id
 
@@ -212,6 +218,33 @@ module MCPClient
       Enumerator.new do |yielder|
         yielder << call_tool(tool_name, parameters)
       end
+    end
+
+    # Generic JSON-RPC request: send method with params and wait for result
+    # @param method [String] JSON-RPC method
+    # @param params [Hash] parameters for the request
+    # @return [Object] result from JSON-RPC response
+    def rpc_request(method, params = {})
+      ensure_initialized
+      req_id = next_id
+      req = { 'jsonrpc' => '2.0', 'id' => req_id, 'method' => method, 'params' => params }
+      send_request(req)
+      res = wait_response(req_id)
+      if (err = res['error'])
+        raise MCPClient::Errors::ServerError, err['message']
+      end
+
+      res['result']
+    end
+
+    # Send a JSON-RPC notification (no response expected)
+    # @param method [String] JSON-RPC method
+    # @param params [Hash] parameters for the notification
+    # @return [void]
+    def rpc_notify(method, params = {})
+      ensure_initialized
+      notif = { 'jsonrpc' => '2.0', 'method' => method, 'params' => params }
+      @stdin.puts(notif.to_json)
     end
   end
 end

@@ -27,5 +27,29 @@ module MCPClient
     def cleanup
       raise NotImplementedError, 'Subclasses must implement cleanup'
     end
+
+    # Send a JSON-RPC request and return the result
+    # @param method [String] JSON-RPC method name
+    # @param params [Hash] parameters for the request
+    # @return [Object] result field from the JSON-RPC response
+    # @raise [MCPClient::Errors::ServerError, MCPClient::Errors::TransportError, MCPClient::Errors::ToolCallError]
+    def rpc_request(method, params = {})
+      raise NotImplementedError, 'Subclasses must implement rpc_request'
+    end
+
+    # Send a JSON-RPC notification (no response expected)
+    # @param method [String] JSON-RPC method name
+    # @param params [Hash] parameters for the notification
+    # @return [void]
+    def rpc_notify(method, params = {})
+      raise NotImplementedError, 'Subclasses must implement rpc_notify'
+    end
+
+    # Register a callback to receive JSON-RPC notifications
+    # @yield [method, params] invoked when a notification is received
+    # @return [void]
+    def on_notification(&block)
+      @notification_callback = block
+    end
   end
 end

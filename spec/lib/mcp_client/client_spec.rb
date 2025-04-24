@@ -14,6 +14,7 @@ RSpec.describe MCPClient::Client do
 
   before do
     allow(MCPClient::ServerFactory).to receive(:create).and_return(mock_server)
+    allow(mock_server).to receive(:on_notification).and_yield('test_event', {})
   end
 
   describe '#initialize' do
@@ -281,10 +282,11 @@ RSpec.describe MCPClient::Client do
     context 'when server supports streaming' do
       let(:stream_enum) { [1, 2, 3].to_enum }
       let(:mock_stream_server) do
-        double('server', list_tools: [stream_tool], call_tool_streaming: stream_enum)
+        double('server', list_tools: [stream_tool], call_tool_streaming: stream_enum, on_notification: nil)
       end
       before do
         allow(MCPClient::ServerFactory).to receive(:create).and_return(mock_stream_server)
+        allow(mock_stream_server).to receive(:on_notification).and_yield('test_event', {})
       end
 
       it 'delegates to server.call_tool_streaming' do

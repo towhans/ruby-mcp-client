@@ -87,6 +87,13 @@ end
 openai_tools = client.to_openai_tools
 anthropic_tools = client.to_anthropic_tools
 
+# Register for server notifications
+client.on_notification do |server, method, params|
+  puts "Server notification: #{server.class} - #{method} - #{params}"
+  # Handle specific notifications based on method name
+  # 'notifications/tools/list_changed' is handled automatically by the client
+end
+
 # Clear cached tools to force fresh fetch on next list
 client.clear_cache
 # Clean up connections
@@ -199,6 +206,7 @@ The SSE client implementation provides these key features:
 - **Reliable error handling**: Comprehensive error handling for network issues, timeouts, and malformed responses
 - **JSON-RPC over SSE**: Full implementation of JSON-RPC 2.0 over SSE transport
 - **Streaming support**: Native streaming for real-time updates via the `call_tool_streaming` method, which returns an Enumerator for processing results as they arrive
+- **Notification support**: Built-in handling for JSON-RPC notifications with automatic tool cache invalidation and custom notification callback support
 
 ## Requirements
 
@@ -213,6 +221,16 @@ To implement a compatible MCP server you must:
 - Respond to `list_tools` requests with a JSON list of tools
 - Respond to `call_tool` requests by executing the specified tool
 - Return results (or errors) in JSON format
+- Optionally send JSON-RPC notifications for events like tool updates
+
+### JSON-RPC Notifications
+
+The client supports JSON-RPC notifications from the server:
+
+- Default notification handler for `notifications/tools/list_changed` to automatically clear the tool cache
+- Custom notification handling via the `on_notification` method
+- Callbacks receive the server instance, method name, and parameters
+- Multiple notification listeners can be registered
 
 ## Tool Schema
 
