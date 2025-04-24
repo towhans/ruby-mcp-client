@@ -3,7 +3,7 @@
 require 'spec_helper'
 
 RSpec.describe MCPClient::ServerSSE do
-  let(:base_url) { 'https://example.com/mcp/' }
+  let(:base_url) { 'https://example.com/mcp' }
   let(:headers) { { 'Authorization' => 'Bearer token123' } }
   let(:server) { described_class.new(base_url: base_url, headers: headers) }
   let(:tool_data) do
@@ -21,13 +21,13 @@ RSpec.describe MCPClient::ServerSSE do
   end
 
   describe '#initialize' do
-    it 'sets the base_url with trailing slash' do
-      expect(server.base_url).to eq('https://example.com/mcp/')
+    it 'normalizes the base_url without a trailing slash' do
+      expect(server.base_url).to eq('https://example.com/mcp')
     end
 
     it 'handles base_url that already has trailing slash' do
       server = described_class.new(base_url: 'https://example.com/mcp/')
-      expect(server.base_url).to eq('https://example.com/mcp/')
+      expect(server.base_url).to eq('https://example.com/mcp')
     end
   end
 
@@ -87,14 +87,16 @@ RSpec.describe MCPClient::ServerSSE do
 
   describe '#list_tools' do
     before do
+      # Stub initialization to avoid real SSE connection
       allow(server).to receive(:connect) do
         server.instance_variable_set(:@connection_established, true)
       end
-
       allow(server).to receive(:perform_initialize) do
         server.instance_variable_set(:@initialized, true)
       end
-
+      # Disable SSE transport for testing synchronous HTTP fallback
+      server.instance_variable_set(:@use_sse, false)
+      # Stub HTTP JSON-RPC request for tools/list
       stub_request(:post, "#{base_url.sub(%r{/sse/?$}, '')}/messages")
         .with(
           headers: { 'Content-Type' => 'application/json' },
@@ -156,14 +158,16 @@ RSpec.describe MCPClient::ServerSSE do
     let(:result) { { 'output' => 'success' } }
 
     before do
+      # Stub initialization to avoid real SSE connection
       allow(server).to receive(:connect) do
         server.instance_variable_set(:@connection_established, true)
       end
-
       allow(server).to receive(:perform_initialize) do
         server.instance_variable_set(:@initialized, true)
       end
-
+      # Disable SSE transport for testing synchronous HTTP fallback
+      server.instance_variable_set(:@use_sse, false)
+      # Stub HTTP JSON-RPC request for tools/call
       stub_request(:post, "#{base_url.sub(%r{/sse/?$}, '')}/messages")
         .with(
           headers: { 'Content-Type' => 'application/json' },

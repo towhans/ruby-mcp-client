@@ -23,7 +23,7 @@ RSpec.describe MCPClient::ServerFactory do
       it 'creates a ServerSSE instance' do
         server = described_class.create(config)
         expect(server).to be_a(MCPClient::ServerSSE)
-        expect(server.base_url).to eq('https://example.com/mcp/')
+        expect(server.base_url).to eq('https://example.com/mcp')
       end
     end
 

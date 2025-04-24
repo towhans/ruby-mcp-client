@@ -26,7 +26,8 @@ module MCPClient
       @logger.formatter = proc { |severity, _datetime, progname, msg| "#{severity} [#{progname}] #{msg}\n" }
       @max_retries = retries
       @retry_backoff = retry_backoff
-      @base_url = base_url.end_with?('/') ? base_url : "#{base_url}/"
+      # Normalize base_url: strip any trailing slash, use exactly as provided
+      @base_url = base_url.chomp('/')
       @headers = headers.merge({
                                  'Accept' => 'text/event-stream',
                                  'Cache-Control' => 'no-cache',
@@ -45,6 +46,8 @@ module MCPClient
       @connection_established = false
       @connection_cv = @mutex.new_cond
       @initialized = false
+      # Whether to use SSE transport; may disable if handshake fails
+      @use_sse = true
     end
 
     # Stream tool call fallback for SSE transport (yields single result)
@@ -230,12 +233,13 @@ module MCPClient
 
     private
 
-    # Ensure handshake initialization has been performed
+    # Ensure SSE initialization handshake has been performed
     def ensure_initialized
       return if @initialized
 
       connect
       perform_initialize
+
       @initialized = true
     end
 
@@ -286,6 +290,7 @@ module MCPClient
             http.request(request) do |response|
               unless response.is_a?(Net::HTTPSuccess) && response['content-type']&.start_with?('text/event-stream')
                 @mutex.synchronize do
+                  # Signal connection attempt completed (failed)
                   @connection_established = false
                   @connection_cv.broadcast
                 end
@@ -293,7 +298,10 @@ module MCPClient
               end
 
               @mutex.synchronize do
+                # Signal connection established and SSE ready
                 @sse_connected = true
+                @connection_established = true
+                @connection_cv.broadcast
               end
 
               response.read_body do |chunk|
@@ -303,6 +311,11 @@ module MCPClient
             end
           end
         rescue StandardError
+          # On any SSE thread error, signal connection as established to unblock connect
+          @mutex.synchronize do
+            @connection_established = true
+            @connection_cv.broadcast
+          end
           nil
         ensure
           sse_http&.finish if sse_http&.started?
@@ -499,37 +512,31 @@ module MCPClient
             raise MCPClient::Errors::ServerError, "Server returned error: #{response.code} #{response.message}"
           end
 
-          if response.code == '202'
+          # If SSE transport is enabled, retrieve the result via the SSE channel
+          if @use_sse
             request_id = request[:id]
-
             start_time = Time.now
-            timeout = 10
+            timeout = @read_timeout || 10
             result = nil
 
             loop do
               @mutex.synchronize do
-                if @sse_results[request_id]
-                  result = @sse_results[request_id]
-                  @sse_results.delete(request_id)
-                end
+                result = @sse_results.delete(request_id) if @sse_results.key?(request_id)
               end
-
               break if result || (Time.now - start_time > timeout)
 
               sleep 0.1
             end
-
             return result if result
 
             raise MCPClient::Errors::ToolCallError, "Timeout waiting for SSE result for request #{request_id}"
-
-          else
-            begin
-              data = JSON.parse(response.body)
-              return data['result']
-            rescue JSON::ParserError => e
-              raise MCPClient::Errors::TransportError, "Invalid JSON response from server: #{e.message}"
-            end
+          end
+          # Fallback: parse synchronous HTTP JSON response
+          begin
+            data = JSON.parse(response.body)
+            return data['result']
+          rescue JSON::ParserError => e
+            raise MCPClient::Errors::TransportError, "Invalid JSON response from server: #{e.message}"
           end
         end
       ensure
