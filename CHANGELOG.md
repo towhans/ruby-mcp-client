@@ -1,5 +1,10 @@
 # Changelog
 
+## 0.4.1 (2025-04-24)
+
+- Server ping functionality
+- Fix SSE connection handling and add graceful fallbacks
+
 ## 0.4.0 (2025-04-23)
 
 - Added full "initialize" hand-shake support to the SSE transport
