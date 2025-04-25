@@ -163,17 +163,16 @@ module MCPClient
       end
     end
 
-    # Ping the MCP server to check connectivity
-    # @param params [Hash] optional parameters for the ping request
+    # Ping the MCP server to check connectivity (zero-parameter heartbeat call)
     # @param server_index [Integer, nil] optional index of a specific server to ping, nil for first available
     # @return [Object] result from the ping request
     # @raise [MCPClient::Errors::ServerNotFound] if no server is available
-    def ping(params = {}, server_index: nil)
+    def ping(server_index: nil)
       if server_index.nil?
         # Ping first available server
         raise MCPClient::Errors::ServerNotFound, 'No server available for ping' if @servers.empty?
 
-        @servers.first.ping(params)
+        @servers.first.ping
       else
         # Ping specified server
         if server_index >= @servers.length
@@ -181,7 +180,7 @@ module MCPClient
                 "Server at index #{server_index} not found"
         end
 
-        @servers[server_index].ping(params)
+        @servers[server_index].ping
       end
     end
 

@@ -100,9 +100,8 @@ result = client.send_rpc('another_method', params: { data: 123 }) # Uses first a
 client.send_notification('status_update', params: { status: 'ready' })
 
 # Check server connectivity 
-client.ping # Basic connectivity check
-client.ping({ echo: "hello" }) # With optional parameters 
-client.ping({}, server_index: 1) # Ping a specific server by index
+client.ping # Basic connectivity check (zero-parameter heartbeat call)
+client.ping(server_index: 1) # Ping a specific server by index
 
 # Clear cached tools to force fresh fetch on next list
 client.clear_cache
@@ -156,7 +155,7 @@ puts "Page snapshot: #{title_result}"
 screenshot_result = sse_client.call_tool('browser_take_screenshot', {})
 
 # Ping the server to verify connectivity
-ping_result = sse_client.ping({ echo: "test ping" })
+ping_result = sse_client.ping
 puts "Ping successful: #{ping_result.inspect}"
 
 # Clean up

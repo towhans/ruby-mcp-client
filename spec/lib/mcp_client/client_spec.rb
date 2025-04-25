@@ -307,18 +307,12 @@ RSpec.describe MCPClient::Client do
 
     it 'pings the first server by default' do
       result = client.ping
-      expect(mock_server).to have_received(:ping).with({})
+      expect(mock_server).to have_received(:ping)
       expect(result).to eq(ping_result)
     end
 
-    it 'passes parameters to the server ping method' do
-      params = { echo: 'hello' }
-      client.ping(params)
-      expect(mock_server).to have_received(:ping).with(params)
-    end
-
     it 'pings a specific server when server_index is provided' do
-      client.ping({}, server_index: 0)
+      client.ping(server_index: 0)
       expect(mock_server).to have_received(:ping)
     end
 
@@ -329,7 +323,7 @@ RSpec.describe MCPClient::Client do
 
     it 'raises ServerNotFound when invalid server_index is provided' do
       expect do
-        client.ping({}, server_index: 1)
+        client.ping(server_index: 1)
       end.to raise_error(MCPClient::Errors::ServerNotFound, 'Server at index 1 not found')
     end
 
@@ -357,7 +351,7 @@ RSpec.describe MCPClient::Client do
       end
 
       it 'pings the specified server when server_index is provided' do
-        result = multi_client.ping({}, server_index: 1)
+        result = multi_client.ping(server_index: 1)
         expect(mock_server).not_to have_received(:ping)
         expect(mock_server2).to have_received(:ping)
         expect(result).to eq({ 'status' => 'ok', 'server' => '2' })

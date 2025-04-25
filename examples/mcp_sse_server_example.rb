@@ -75,7 +75,7 @@ puts 'Browser closed'
 # Ping the server to check connectivity
 puts "\nPinging server:"
 begin
-  ping_result = sse_client.ping({ echo: 'test ping' })
+  ping_result = sse_client.ping
   puts "Ping successful: #{ping_result.inspect}"
 rescue StandardError => e
   puts "Ping failed: #{e.message}"
