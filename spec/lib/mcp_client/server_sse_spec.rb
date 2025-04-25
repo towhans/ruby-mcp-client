@@ -282,7 +282,6 @@ RSpec.describe MCPClient::ServerSSE do
       server.instance_variable_set(:@sse_connected, true)
       server.instance_variable_set(:@tools, [double('tool')])
 
-
       # Call cleanup and verify state
       server.cleanup
 
