@@ -31,9 +31,9 @@ module MCPClient
       # Register default and user-defined notification handlers on each server
       @servers.each do |server|
         server.on_notification do |method, params|
-          # Default handling: clear tool cache on tools list change
-          clear_cache if method == 'notifications/tools/list_changed'
-          # Invoke user listeners
+          # Default notification processing (e.g., cache invalidation, logging)
+          process_notification(server, method, params)
+          # Invoke user-defined listeners
           @notification_listeners.each { |cb| cb.call(server, method, params) }
         end
       end
@@ -163,17 +163,16 @@ module MCPClient
       end
     end
 
-    # Ping the MCP server to check connectivity
-    # @param params [Hash] optional parameters for the ping request
+    # Ping the MCP server to check connectivity (zero-parameter heartbeat call)
     # @param server_index [Integer, nil] optional index of a specific server to ping, nil for first available
     # @return [Object] result from the ping request
     # @raise [MCPClient::Errors::ServerNotFound] if no server is available
-    def ping(params = {}, server_index: nil)
+    def ping(server_index: nil)
       if server_index.nil?
         # Ping first available server
         raise MCPClient::Errors::ServerNotFound, 'No server available for ping' if @servers.empty?
 
-        @servers.first.ping(params)
+        @servers.first.ping
       else
         # Ping specified server
         if server_index >= @servers.length
@@ -181,11 +180,77 @@ module MCPClient
                 "Server at index #{server_index} not found"
         end
 
-        @servers[server_index].ping(params)
+        @servers[server_index].ping
       end
     end
 
+    # Send a raw JSON-RPC request to a server
+    # @param method [String] JSON-RPC method name
+    # @param params [Hash] parameters for the request
+    # @param server [Integer, String, Symbol, MCPClient::ServerBase, nil] server selector
+    # @return [Object] result from the JSON-RPC response
+    def send_rpc(method, params: {}, server: nil)
+      srv = select_server(server)
+      srv.rpc_request(method, params)
+    end
+
+    # Send a raw JSON-RPC notification to a server (no response expected)
+    # @param method [String] JSON-RPC method name
+    # @param params [Hash] parameters for the notification
+    # @param server [Integer, String, Symbol, MCPClient::ServerBase, nil] server selector
+    # @return [void]
+    def send_notification(method, params: {}, server: nil)
+      srv = select_server(server)
+      srv.rpc_notify(method, params)
+    end
+
     private
+
+    # Process incoming JSON-RPC notifications with default handlers
+    # @param server [MCPClient::ServerBase] the server that emitted the notification
+    # @param method [String] JSON-RPC notification method
+    # @param params [Hash] parameters for the notification
+    # @return [void]
+    def process_notification(server, method, params)
+      case method
+      when 'notifications/tools/list_changed'
+        logger.warn("[#{server.class}] Tool list has changed, clearing tool cache")
+        clear_cache
+      when 'notifications/resources/updated'
+        logger.warn("[#{server.class}] Resource #{params['uri']} updated")
+      when 'notifications/prompts/list_changed'
+        logger.warn("[#{server.class}] Prompt list has changed")
+      when 'notifications/resources/list_changed'
+        logger.warn("[#{server.class}] Resource list has changed")
+      end
+    end
+
+    # Select a server based on index, type, or instance
+    # @param server_arg [Integer, String, Symbol, MCPClient::ServerBase, nil] server selector
+    # @return [MCPClient::ServerBase]
+    def select_server(server_arg)
+      case server_arg
+      when nil
+        raise MCPClient::Errors::ServerNotFound, 'No server available' if @servers.empty?
+
+        @servers.first
+      when Integer
+        @servers.fetch(server_arg) do
+          raise MCPClient::Errors::ServerNotFound, "Server at index #{server_arg} not found"
+        end
+      when String, Symbol
+        key = server_arg.to_s.downcase
+        srv = @servers.find { |s| s.class.name.split('::').last.downcase.end_with?(key) }
+        raise MCPClient::Errors::ServerNotFound, "Server of type #{server_arg} not found" unless srv
+
+        srv
+      else
+        raise ArgumentError, "Invalid server argument: #{server_arg.inspect}" unless @servers.include?(server_arg)
+
+        server_arg
+
+      end
+    end
 
     # Validate parameters against tool JSON schema (checks required properties)
     # @param tool [MCPClient::Tool] tool definition with schema

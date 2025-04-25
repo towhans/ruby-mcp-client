@@ -248,14 +248,8 @@ RSpec.describe MCPClient::ServerStdio do
 
   describe '#ping' do
     it 'delegates to rpc_request and returns the result' do
-      allow(server).to receive(:rpc_request).with('ping', {}).and_return({})
+      allow(server).to receive(:rpc_request).with('ping').and_return({})
       expect(server.ping).to eq({})
-    end
-
-    it 'passes parameters to rpc_request' do
-      params = { foo: 'bar' }
-      allow(server).to receive(:rpc_request).with('ping', params).and_return({ 'status' => 'ok' })
-      expect(server.ping(params)).to eq({ 'status' => 'ok' })
     end
   end
 
