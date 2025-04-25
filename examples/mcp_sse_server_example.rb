@@ -20,7 +20,7 @@ sse_client = MCPClient.create_client(
     # Local Playwright MCP SSE server
     MCPClient.sse_config(
       base_url: 'http://localhost:8931/sse',
-      read_timeout: 30,  # Timeout in seconds
+      read_timeout: 30 # Timeout in seconds
     )
   ]
 )
@@ -40,17 +40,17 @@ puts "\nFound #{browser_tools.length} browser-related tools"
 
 # Launch a browser
 puts "\nLaunching browser..."
-result = sse_client.call_tool('browser_install', {})
-puts "Browser installed"
-result = sse_client.call_tool('browser_navigate', { url: 'about:blank' })
+sse_client.call_tool('browser_install', {})
+puts 'Browser installed'
+sse_client.call_tool('browser_navigate', { url: 'about:blank' })
 # No browser ID needed with these tool names
-puts "Browser launched and navigated to blank page"
+puts 'Browser launched and navigated to blank page'
 
 # Create a new page
 puts "\nCreating a new page..."
-page_result = sse_client.call_tool('browser_tab_new', {})
+sse_client.call_tool('browser_tab_new', {})
 # No page ID needed with these tool names
-puts "New tab created"
+puts 'New tab created'
 
 # Navigate to a website
 puts "\nNavigating to a website..."
@@ -64,8 +64,8 @@ puts "Page title: #{title_result}"
 
 # Take a screenshot
 puts "\nTaking a screenshot..."
-screenshot_result = sse_client.call_tool('browser_take_screenshot', {})
-puts "Screenshot captured successfully"
+sse_client.call_tool('browser_take_screenshot', {})
+puts 'Screenshot captured successfully'
 
 # Close browser
 puts "\nClosing browser..."

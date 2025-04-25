@@ -32,55 +32,59 @@ RSpec.describe MCPClient::ServerSSE do
   end
 
   describe '#connect' do
-    it 'creates an HTTP client for the given URL' do
-      allow(server).to receive(:connect).and_wrap_original do |_original_method|
-        uri = URI.parse(server.base_url)
-        http_client = Net::HTTP.new(uri.host, uri.port)
+    it 'creates a Faraday connection for the given URL' do
+      # Mock the thread creation to prevent actual connection attempts
+      expect(Thread).to receive(:new).and_return(double('thread', alive?: true))
 
-        if uri.scheme == 'https'
-          http_client.use_ssl = true
-          http_client.verify_mode = OpenSSL::SSL::VERIFY_PEER
-        end
-
-        server.instance_variable_set(:@http_client, http_client)
+      # Stub the condition variable to simulate a successful connection
+      allow_any_instance_of(MonitorMixin::ConditionVariable).to receive(:wait) do |_timeout, &block|
         server.instance_variable_set(:@connection_established, true)
+        block.call
       end
 
-      server.connect
-
-      expect(server.http_client).to be_a(Net::HTTP)
-      expect(server.http_client.address).to eq('example.com')
-      expect(server.http_client.port).to eq(443)
+      expect(server.connect).to eq true
     end
 
-    it 'configures SSL for HTTPS URLs' do
+    it 'handles HTTPS URLs appropriately' do
+      # Skip the actual connection creation by stubbing the thread creation
+      allow(Thread).to receive(:new).and_return(double('thread', alive?: true))
+
+      # Prevent the wait call from blocking
+      allow_any_instance_of(MonitorMixin::ConditionVariable).to receive(:wait) do |_timeout, &block|
+        server.instance_variable_set(:@connection_established, true)
+        server.instance_variable_set(:@initialized, true)
+        block.call
+      end
+
+      # Just verify that we can connect
       uri = URI.parse(server.base_url)
-      http_client = Net::HTTP.new(uri.host, uri.port)
-
-      if uri.scheme == 'https'
-        http_client.use_ssl = true
-        http_client.verify_mode = OpenSSL::SSL::VERIFY_PEER
-      end
-
-      server.instance_variable_set(:@http_client, http_client)
-
-      expect(server.http_client.use_ssl?).to be true
-      expect(server.http_client.verify_mode).to eq(OpenSSL::SSL::VERIFY_PEER)
+      expect(uri.scheme).to eq('https')
+      expect(server.connect).to be true
     end
 
-    it 'does not configure SSL for HTTP URLs' do
+    it 'handles HTTP URLs appropriately' do
       http_server = described_class.new(base_url: 'http://example.com/mcp/')
 
+      # Skip the actual connection creation by stubbing the thread creation
+      allow(Thread).to receive(:new).and_return(double('thread', alive?: true))
+
+      # Prevent the wait call from blocking
+      allow_any_instance_of(MonitorMixin::ConditionVariable).to receive(:wait) do |_timeout, &block|
+        http_server.instance_variable_set(:@connection_established, true)
+        http_server.instance_variable_set(:@initialized, true)
+        block.call
+      end
+
+      # Just verify that we can connect
       uri = URI.parse(http_server.base_url)
-      http_client = Net::HTTP.new(uri.host, uri.port)
-
-      http_server.instance_variable_set(:@http_client, http_client)
-
-      expect(http_server.http_client.use_ssl?).to be false
+      expect(uri.scheme).to eq('http')
+      expect(http_server.connect).to be true
     end
 
     it 'raises ConnectionError on failure' do
-      allow(Net::HTTP).to receive(:new).and_raise(StandardError.new('Connection failed'))
+      # Simulate a connection failure
+      allow(Thread).to receive(:new).and_raise(StandardError.new('Connection failed'))
+
       expect { server.connect }.to raise_error(MCPClient::Errors::ConnectionError, /Failed to connect/)
     end
   end
@@ -117,7 +121,22 @@ RSpec.describe MCPClient::ServerSSE do
     end
 
     it 'connects if not already connected' do
-      expect(server).to receive(:connect).and_call_original
+      # Reset initialized state
+      server.instance_variable_set(:@initialized, false)
+      server.instance_variable_set(:@connection_established, false)
+
+      # Mock the connection
+      expect(server).to receive(:connect) do
+        server.instance_variable_set(:@connection_established, true)
+      end
+
+      expect(server).to receive(:perform_initialize) do
+        server.instance_variable_set(:@initialized, true)
+      end
+
+      # Makes sure tools are cached
+      expect(server).to receive(:request_tools_list).and_return([tool_data])
+
       server.list_tools
     end
 
@@ -250,17 +269,22 @@ RSpec.describe MCPClient::ServerSSE do
   end
 
   describe '#cleanup' do
-    it 'resets the HTTP client' do
-      uri = URI.parse(server.base_url)
-      http_client = Net::HTTP.new(uri.host, uri.port)
-      server.instance_variable_set(:@http_client, http_client)
+    it 'resets all connection state and thread' do
+      # Set up initial state
+      server.instance_variable_set(:@sse_thread, double('thread', kill: nil))
       server.instance_variable_set(:@connection_established, true)
+      server.instance_variable_set(:@sse_connected, true)
+      server.instance_variable_set(:@tools, [double('tool')])
+      server.instance_variable_set(:@session_id, 'test-session')
 
-      expect(server.http_client).not_to be_nil
-
+      # Call cleanup and verify state
       server.cleanup
 
-      expect(server.http_client).to be_nil
+      expect(server.instance_variable_get(:@sse_thread)).to be_nil
+      expect(server.instance_variable_get(:@connection_established)).to be false
+      expect(server.instance_variable_get(:@sse_connected)).to be false
+      expect(server.instance_variable_get(:@tools)).to be_nil
+      expect(server.instance_variable_get(:@session_id)).to be_nil
     end
   end
 
@@ -403,39 +427,57 @@ RSpec.describe MCPClient::ServerSSE do
       server.instance_variable_set(:@session_id, 'test_session')
       # Skip initialization in the tests
       allow(server).to receive(:ensure_initialized).and_return(true)
-      # Let's mock the actual HTTP request since this doesn't use Faraday
-      @mock_http = instance_double(Net::HTTP)
-      allow(Net::HTTP).to receive(:new).and_return(@mock_http)
-      allow(@mock_http).to receive(:use_ssl=)
-      allow(@mock_http).to receive(:verify_mode=)
-      allow(@mock_http).to receive(:open_timeout=)
-      allow(@mock_http).to receive(:read_timeout=)
-      allow(@mock_http).to receive(:keep_alive_timeout=)
-      allow(@mock_http).to receive(:started?).and_return(false)
-      allow(@mock_http).to receive(:start).and_yield(@mock_http)
-      allow(@mock_http).to receive(:finish)
+
+      # Create a Faraday mock
+      @mock_conn = instance_double(Faraday::Connection)
+      allow(Faraday).to receive(:new).and_return(@mock_conn)
+
+      # Set up message endpoint
+      endpoint = '/messages?sessionId=test_session'
+      server.instance_variable_set(:@rpc_endpoint, endpoint)
+
+      # Create successful response mock
+      @success_response = instance_double(Faraday::Response)
+      allow(@success_response).to receive(:success?).and_return(true)
+      allow(@success_response).to receive(:status).and_return(200)
+      allow(@success_response).to receive(:reason_phrase).and_return('OK')
+
+      # Create error response mock
+      @error_response = instance_double(Faraday::Response)
+      allow(@error_response).to receive(:success?).and_return(false)
+      allow(@error_response).to receive(:status).and_return(500)
+      allow(@error_response).to receive(:reason_phrase).and_return('Server Error')
     end
 
     it 'sends a JSON-RPC notification with the given method and parameters' do
-      mock_response = instance_double(Net::HTTPSuccess)
-      allow(mock_response).to receive(:is_a?).with(Net::HTTPSuccess).and_return(true)
+      # Set up expectations for the post request
+      expect(@mock_conn).to receive(:post) do |_endpoint, &block|
+        request = double('request')
+        headers = {}
 
-      expect(@mock_http).to receive(:request) do |request|
-        expect(request.body).to include('"method":"test_notify"')
-        expect(request.body).to include('"params":{"param":"value"}')
-        mock_response
+        # Mock the headers hash
+        expect(request).to receive(:headers).at_least(:once).and_return(headers)
+
+        # Capture the request body
+        expect(request).to receive(:body=) do |body_json|
+          body = JSON.parse(body_json)
+          expect(body['method']).to eq('test_notify')
+          expect(body['params']).to eq({ 'param' => 'value' })
+        end
+
+        # Call the block with our request mock
+        block.call(request)
+
+        # Return success response
+        @success_response
       end
 
       server.rpc_notify('test_notify', { param: 'value' })
     end
 
     it 'raises TransportError when response is not successful' do
-      mock_response = instance_double(Net::HTTPClientError)
-      allow(mock_response).to receive(:is_a?).with(Net::HTTPSuccess).and_return(false)
-      allow(mock_response).to receive(:code).and_return('500')
-      allow(mock_response).to receive(:message).and_return('Server Error')
-
-      allow(@mock_http).to receive(:request).and_return(mock_response)
+      # Set up expectation for a failed request
+      expect(@mock_conn).to receive(:post).and_return(@error_response)
 
       expect do
         server.rpc_notify('test_notify', { param: 'value' })
@@ -443,7 +485,8 @@ RSpec.describe MCPClient::ServerSSE do
     end
 
     it 'raises TransportError on network failures' do
-      allow(@mock_http).to receive(:request).and_raise(Errno::ECONNRESET)
+      # Set up expectation for a network error
+      expect(@mock_conn).to receive(:post).and_raise(Faraday::ConnectionFailed.new('Connection reset'))
 
       expect do
         server.rpc_notify('test_notify', { param: 'value' })

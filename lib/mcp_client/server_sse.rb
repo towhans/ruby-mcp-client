@@ -1,18 +1,17 @@
 # frozen_string_literal: true
 
 require 'uri'
-require 'net/http'
 require 'json'
-require 'openssl'
 require 'monitor'
 require 'logger'
 require 'faraday'
+require 'faraday/retry'
 
 module MCPClient
   # Implementation of MCP server that communicates via Server-Sent Events (SSE)
   # Useful for communicating with remote MCP servers over HTTP
   class ServerSSE < ServerBase
-    attr_reader :base_url, :tools, :session_id, :http_client, :server_info, :capabilities
+    attr_reader :base_url, :tools, :session_id, :server_info, :capabilities
 
     # @param base_url [String] The base URL of the MCP server
     # @param headers [Hash] Additional headers to include in requests
@@ -34,10 +33,12 @@ module MCPClient
                                  'Cache-Control' => 'no-cache',
                                  'Connection' => 'keep-alive'
                                })
-      @http_client = nil
+      # HTTP client is managed via Faraday
       @tools = nil
       @read_timeout = read_timeout
       @session_id = nil
+      # SSE-provided JSON-RPC endpoint path for POST requests
+      @rpc_endpoint = nil
       @tools_data = nil
       @request_id = 0
       @sse_results = {}
@@ -133,19 +134,7 @@ module MCPClient
       @mutex.synchronize do
         return true if @connection_established
 
-        uri = URI.parse(@base_url)
-        @http_client = Net::HTTP.new(uri.host, uri.port)
-
-        if uri.scheme == 'https'
-          @http_client.use_ssl = true
-          @http_client.verify_mode = OpenSSL::SSL::VERIFY_PEER
-        end
-
-        @http_client.open_timeout = 10
-        @http_client.read_timeout = @read_timeout
-        @http_client.keep_alive_timeout = 60
-
-        @http_client.start
+        # Start SSE listener using Faraday HTTP client
         start_sse_thread
 
         timeout = 10
@@ -205,31 +194,34 @@ module MCPClient
     # @return [void]
     def rpc_notify(method, params = {})
       ensure_initialized
-      url_base = @base_url.sub(%r{/sse/?$}, '')
-      uri = URI.parse("#{url_base}/messages?sessionId=#{@session_id}")
-      rpc_http = Net::HTTP.new(uri.host, uri.port)
-      if uri.scheme == 'https'
-        rpc_http.use_ssl = true
-        rpc_http.verify_mode = OpenSSL::SSL::VERIFY_PEER
+      # Determine RPC endpoint for notifications (prefer SSE-provided endpoint)
+      base = @base_url.sub(%r{/sse/?$}, '')
+      rpc_ep = @mutex.synchronize { @rpc_endpoint } || "/messages?sessionId=#{@session_id}"
+      # Initialize or reuse Faraday connection
+      @rpc_conn ||= Faraday.new(url: base) do |f|
+        # Retry transient HTTP/network errors for notifications
+        f.request :retry, max: @max_retries, interval: @retry_backoff, backoff_factor: 2
+        f.options.open_timeout = 10
+        f.options.timeout = @read_timeout
+        f.adapter Faraday.default_adapter
       end
-      rpc_http.open_timeout = 10
-      rpc_http.read_timeout = @read_timeout
-      rpc_http.keep_alive_timeout = 60
-      rpc_http.start do |http|
-        http_req = Net::HTTP::Post.new(uri)
-        http_req.content_type = 'application/json'
-        http_req.body = { jsonrpc: '2.0', method: method, params: params }.to_json
-        headers = @headers.dup
-        headers.except('Accept', 'Cache-Control').each { |k, v| http_req[k] = v }
-        response = http.request(http_req)
-        unless response.is_a?(Net::HTTPSuccess)
-          raise MCPClient::Errors::ServerError, "Notification failed: #{response.code} #{response.message}"
+      # Perform POST request for notification
+      response = @rpc_conn.post(rpc_ep) do |req|
+        req.headers['Content-Type'] = 'application/json'
+        # Copy headers excluding SSE-specific ones
+        (@headers.dup.tap do |h|
+          h.delete('Accept')
+          h.delete('Cache-Control')
+        end).each do |k, v|
+          req.headers[k] = v
         end
+        req.body = { jsonrpc: '2.0', method: method, params: params }.to_json
+      end
+      unless response.success?
+        raise MCPClient::Errors::ServerError, "Notification failed: #{response.status} #{response.reason_phrase}"
       end
     rescue StandardError => e
       raise MCPClient::Errors::TransportError, "Failed to send notification: #{e.message}"
-    ensure
-      rpc_http.finish if rpc_http&.started?
     end
 
     private
@@ -270,60 +262,31 @@ module MCPClient
       return if @sse_thread&.alive?
 
       @sse_thread = Thread.new do
-        sse_http = nil
-        begin
-          uri = URI.parse(@base_url)
-          sse_http = Net::HTTP.new(uri.host, uri.port)
+        uri = URI.parse(@base_url)
+        sse_base = "#{uri.scheme}://#{uri.host}:#{uri.port}"
+        sse_path = uri.request_uri
 
-          if uri.scheme == 'https'
-            sse_http.use_ssl = true
-            sse_http.verify_mode = OpenSSL::SSL::VERIFY_PEER
-          end
+        @sse_conn ||= Faraday.new(url: sse_base) do |f|
+          f.options.open_timeout = 10
+          f.options.timeout = nil
+          f.adapter Faraday.default_adapter
+        end
 
-          sse_http.open_timeout = 10
-          sse_http.read_timeout = @read_timeout
-          sse_http.keep_alive_timeout = 60
-
-          sse_http.start do |http|
-            request = Net::HTTP::Get.new(uri)
-            @headers.each { |k, v| request[k] = v }
-
-            http.request(request) do |response|
-              unless response.is_a?(Net::HTTPSuccess) && response['content-type']&.start_with?('text/event-stream')
-                @mutex.synchronize do
-                  # Signal connection attempt completed (failed)
-                  @connection_established = false
-                  @connection_cv.broadcast
-                end
-                raise MCPClient::Errors::ServerError, 'Server response not OK or not text/event-stream'
-              end
-
-              @mutex.synchronize do
-                # Signal connection established and SSE ready
-                @sse_connected = true
-                @connection_established = true
-                @connection_cv.broadcast
-              end
-
-              response.read_body do |chunk|
-                @logger.debug("SSE chunk received: #{chunk.inspect}")
-                process_sse_chunk(chunk.dup)
-              end
-            end
-          end
-        rescue StandardError
-          # On any SSE thread error, signal connection as established to unblock connect
-          @mutex.synchronize do
-            @connection_established = true
-            @connection_cv.broadcast
-          end
-          nil
-        ensure
-          sse_http&.finish if sse_http&.started?
-          @mutex.synchronize do
-            @sse_connected = false
+        @sse_conn.get(sse_path) do |req|
+          @headers.each { |k, v| req.headers[k] = v }
+          req.options.on_data = proc do |chunk, _bytes|
+            @logger.debug("SSE chunk received: #{chunk.inspect}")
+            process_sse_chunk(chunk.dup)
           end
         end
+      rescue StandardError
+        # On any SSE thread error, signal connection established to unblock connect
+        @mutex.synchronize do
+          @connection_established = true
+          @connection_cv.broadcast
+        end
+      ensure
+        @mutex.synchronize { @sse_connected = false }
       end
     end
 
@@ -353,14 +316,12 @@ module MCPClient
 
       case event[:event]
       when 'endpoint'
-        if event[:data].include?('sessionId=')
-          session_id = event[:data].split('sessionId=').last
-
-          @mutex.synchronize do
-            @session_id = session_id
-            @connection_established = true
-            @connection_cv.broadcast
-          end
+        ep = event[:data]
+        @mutex.synchronize do
+          @rpc_endpoint = ep
+          @session_id = ep.split('sessionId=').last if ep.include?('sessionId=')
+          @connection_established = true
+          @connection_cv.broadcast
         end
       when 'message'
         begin
@@ -475,10 +436,13 @@ module MCPClient
     # @return [Hash] the result of the request
     def send_jsonrpc_request(request)
       @logger.debug("Sending JSON-RPC request: #{request.to_json}")
-      # Build RPC endpoint path
+      # Build RPC endpoint path (prefer SSE-provided endpoint)
       base = @base_url.sub(%r{/sse/?$}, '')
+      rpc_ep     = @mutex.synchronize { @rpc_endpoint }
       session_id = @mutex.synchronize { @session_id }
-      path = if session_id
+      path = if rpc_ep
+               rpc_ep
+             elsif session_id
                "/messages?sessionId=#{session_id}"
              else
                '/messages'
@@ -486,6 +450,8 @@ module MCPClient
 
       # Initialize or reuse Faraday connection
       @rpc_conn ||= Faraday.new(url: base) do |f|
+        # Retry transient HTTP/network errors
+        f.request :retry, max: @max_retries, interval: @retry_backoff, backoff_factor: 2
         f.options.open_timeout = 10
         f.options.timeout = @read_timeout
         f.adapter Faraday.default_adapter
