@@ -194,21 +194,18 @@ module MCPClient
     # @return [void]
     def rpc_notify(method, params = {})
       ensure_initialized
-      # Determine RPC endpoint for notifications (prefer SSE-provided endpoint)
-      base = @base_url.sub(%r{/sse/?$}, '')
+      uri = URI.parse(@base_url)
+      base = "#{uri.scheme}://#{uri.host}:#{uri.port}"
       rpc_ep = @mutex.synchronize { @rpc_endpoint } || "/messages?sessionId=#{@session_id}"
-      # Initialize or reuse Faraday connection
       @rpc_conn ||= Faraday.new(url: base) do |f|
-        # Retry transient HTTP/network errors for notifications
         f.request :retry, max: @max_retries, interval: @retry_backoff, backoff_factor: 2
-        f.options.open_timeout = 10
+        f.options.open_timeout = @read_timeout
         f.options.timeout = @read_timeout
         f.adapter Faraday.default_adapter
       end
-      # Perform POST request for notification
       response = @rpc_conn.post(rpc_ep) do |req|
         req.headers['Content-Type'] = 'application/json'
-        # Copy headers excluding SSE-specific ones
+        req.headers['Accept'] = 'application/json'
         (@headers.dup.tap do |h|
           h.delete('Accept')
           h.delete('Cache-Control')
@@ -436,8 +433,8 @@ module MCPClient
     # @return [Hash] the result of the request
     def send_jsonrpc_request(request)
       @logger.debug("Sending JSON-RPC request: #{request.to_json}")
-      # Build RPC endpoint path (prefer SSE-provided endpoint)
-      base = @base_url.sub(%r{/sse/?$}, '')
+      uri = URI.parse(@base_url)
+      base = "#{uri.scheme}://#{uri.host}:#{uri.port}"
       rpc_ep     = @mutex.synchronize { @rpc_endpoint }
       session_id = @mutex.synchronize { @session_id }
       path = if rpc_ep
@@ -448,19 +445,16 @@ module MCPClient
                '/messages'
              end
 
-      # Initialize or reuse Faraday connection
       @rpc_conn ||= Faraday.new(url: base) do |f|
-        # Retry transient HTTP/network errors
         f.request :retry, max: @max_retries, interval: @retry_backoff, backoff_factor: 2
-        f.options.open_timeout = 10
+        f.options.open_timeout = @read_timeout
         f.options.timeout = @read_timeout
         f.adapter Faraday.default_adapter
       end
 
-      # Perform POST request
       response = @rpc_conn.post(path) do |req|
         req.headers['Content-Type'] = 'application/json'
-        # Copy headers excluding SSE-specific ones
+        req.headers['Accept'] = 'application/json'
         (@headers.dup.tap do |h|
           h.delete('Accept')
           h.delete('Cache-Control')
