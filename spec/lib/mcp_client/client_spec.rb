@@ -364,4 +364,136 @@ RSpec.describe MCPClient::Client do
       end
     end
   end
+
+  describe '#send_rpc' do
+    let(:client) { described_class.new(mcp_server_configs: [{ type: 'stdio', command: 'test' }]) }
+    let(:rpc_result) { { 'result' => 'success' } }
+
+    before do
+      allow(mock_server).to receive(:rpc_request).and_return(rpc_result)
+    end
+
+    it 'sends RPC request to the first server by default' do
+      result = client.send_rpc('test_method', params: { arg: 'value' })
+      expect(mock_server).to have_received(:rpc_request).with('test_method', { arg: 'value' })
+      expect(result).to eq(rpc_result)
+    end
+
+    it 'sends RPC request to specified server by index' do
+      client.send_rpc('test_method', params: { arg: 'value' }, server: 0)
+      expect(mock_server).to have_received(:rpc_request).with('test_method', { arg: 'value' })
+    end
+
+    context 'with multiple servers' do
+      let(:mock_server2) { instance_double(MCPClient::ServerBase) }
+      let(:multi_client) do
+        client = described_class.new(mcp_server_configs: [
+                                       { type: 'stdio', command: 'test1' },
+                                       { type: 'stdio', command: 'test2' }
+                                     ])
+        client.instance_variable_set(:@servers, [mock_server, mock_server2])
+        client
+      end
+
+      before do
+        allow(mock_server2).to receive(:rpc_request).and_return({ 'result' => 'server2' })
+        allow(mock_server2).to receive(:on_notification)
+      end
+
+      it 'sends RPC to specified server by index' do
+        result = multi_client.send_rpc('test_method', params: { arg: 'value' }, server: 1)
+        expect(mock_server2).to have_received(:rpc_request).with('test_method', { arg: 'value' })
+        expect(result).to eq({ 'result' => 'server2' })
+      end
+
+      it 'sends RPC to server by type string' do
+        # Need to mock finding server by type
+        expect(multi_client).to receive(:select_server).with('stdio').and_return(mock_server2)
+
+        result = multi_client.send_rpc('test_method', params: { arg: 'value' }, server: 'stdio')
+        expect(mock_server2).to have_received(:rpc_request).with('test_method', { arg: 'value' })
+        expect(result).to eq({ 'result' => 'server2' })
+      end
+
+      it 'sends RPC to server instance directly' do
+        result = multi_client.send_rpc('test_method', params: { arg: 'value' }, server: mock_server2)
+        expect(mock_server2).to have_received(:rpc_request).with('test_method', { arg: 'value' })
+        expect(result).to eq({ 'result' => 'server2' })
+      end
+    end
+  end
+
+  describe '#send_notification' do
+    let(:client) { described_class.new(mcp_server_configs: [{ type: 'stdio', command: 'test' }]) }
+
+    before do
+      allow(mock_server).to receive(:rpc_notify)
+    end
+
+    it 'sends notification to the first server by default' do
+      client.send_notification('test_event', params: { arg: 'value' })
+      expect(mock_server).to have_received(:rpc_notify).with('test_event', { arg: 'value' })
+    end
+
+    it 'sends notification to specified server by index' do
+      client.send_notification('test_event', params: { arg: 'value' }, server: 0)
+      expect(mock_server).to have_received(:rpc_notify).with('test_event', { arg: 'value' })
+    end
+
+    context 'with multiple servers' do
+      let(:mock_server2) { instance_double(MCPClient::ServerBase) }
+      let(:multi_client) do
+        client = described_class.new(mcp_server_configs: [
+                                       { type: 'stdio', command: 'test1' },
+                                       { type: 'stdio', command: 'test2' }
+                                     ])
+        client.instance_variable_set(:@servers, [mock_server, mock_server2])
+        client
+      end
+
+      before do
+        allow(mock_server2).to receive(:rpc_notify)
+        allow(mock_server2).to receive(:on_notification)
+      end
+
+      it 'sends notification to specified server by index' do
+        multi_client.send_notification('test_event', params: { arg: 'value' }, server: 1)
+        expect(mock_server2).to have_received(:rpc_notify).with('test_event', { arg: 'value' })
+      end
+    end
+  end
+
+  describe 'notification handling' do
+    let(:client) { described_class.new(mcp_server_configs: [{ type: 'stdio', command: 'test' }]) }
+    let(:notification_callback) { double('callback') }
+
+    before do
+      allow(notification_callback).to receive(:call)
+    end
+
+    it 'registers notification listeners' do
+      client.on_notification { |server, method, params| notification_callback.call(server, method, params) }
+
+      # Simulate notification
+      server = client.servers.first
+      client.instance_variable_get(:@notification_listeners).each do |cb|
+        cb.call(server, 'test_event', { data: 'test' })
+      end
+
+      expect(notification_callback).to have_received(:call).with(server, 'test_event', { data: 'test' })
+    end
+
+    it 'handles tools/list_changed notification by clearing cache' do
+      # Stub list_tools to populate the cache
+      allow(mock_server).to receive(:list_tools).and_return([mock_tool])
+
+      client.list_tools # Fill cache
+      expect(client.tool_cache).not_to be_empty
+
+      # Manually trigger process_notification with tools/list_changed
+      client.send(:process_notification, client.servers.first, 'notifications/tools/list_changed', {})
+
+      expect(client.tool_cache).to be_empty
+    end
+  end
 end

@@ -6,6 +6,7 @@ require 'json'
 require 'openssl'
 require 'monitor'
 require 'logger'
+require 'faraday'
 
 module MCPClient
   # Implementation of MCP server that communicates via Server-Sent Events (SSE)
@@ -474,73 +475,63 @@ module MCPClient
     # @return [Hash] the result of the request
     def send_jsonrpc_request(request)
       @logger.debug("Sending JSON-RPC request: #{request.to_json}")
-      uri = URI.parse(@base_url)
-      rpc_http = Net::HTTP.new(uri.host, uri.port)
+      # Build RPC endpoint path
+      base = @base_url.sub(%r{/sse/?$}, '')
+      session_id = @mutex.synchronize { @session_id }
+      path = if session_id
+               "/messages?sessionId=#{session_id}"
+             else
+               '/messages'
+             end
 
-      if uri.scheme == 'https'
-        rpc_http.use_ssl = true
-        rpc_http.verify_mode = OpenSSL::SSL::VERIFY_PEER
+      # Initialize or reuse Faraday connection
+      @rpc_conn ||= Faraday.new(url: base) do |f|
+        f.options.open_timeout = 10
+        f.options.timeout = @read_timeout
+        f.adapter Faraday.default_adapter
       end
 
-      rpc_http.open_timeout = 10
-      rpc_http.read_timeout = @read_timeout
-      rpc_http.keep_alive_timeout = 60
-
-      begin
-        rpc_http.start do |http|
-          session_id = @mutex.synchronize { @session_id }
-
-          url = if session_id
-                  "#{@base_url.sub(%r{/sse/?$}, '')}/messages?sessionId=#{session_id}"
-                else
-                  "#{@base_url.sub(%r{/sse/?$}, '')}/messages"
-                end
-
-          uri = URI.parse(url)
-          http_request = Net::HTTP::Post.new(uri)
-          http_request.content_type = 'application/json'
-          http_request.body = request.to_json
-
-          headers = @mutex.synchronize { @headers.dup }
-          headers.except('Accept', 'Cache-Control')
-                 .each { |k, v| http_request[k] = v }
-
-          response = http.request(http_request)
-          @logger.debug("Received JSON-RPC response: #{response.code} #{response.body}")
-
-          unless response.is_a?(Net::HTTPSuccess)
-            raise MCPClient::Errors::ServerError, "Server returned error: #{response.code} #{response.message}"
-          end
-
-          # If SSE transport is enabled, retrieve the result via the SSE channel
-          if @use_sse
-            request_id = request[:id]
-            start_time = Time.now
-            timeout = @read_timeout || 10
-            result = nil
-
-            loop do
-              @mutex.synchronize do
-                result = @sse_results.delete(request_id) if @sse_results.key?(request_id)
-              end
-              break if result || (Time.now - start_time > timeout)
-
-              sleep 0.1
-            end
-            return result if result
-
-            raise MCPClient::Errors::ToolCallError, "Timeout waiting for SSE result for request #{request_id}"
-          end
-          # Fallback: parse synchronous HTTP JSON response
-          begin
-            data = JSON.parse(response.body)
-            return data['result']
-          rescue JSON::ParserError => e
-            raise MCPClient::Errors::TransportError, "Invalid JSON response from server: #{e.message}"
-          end
+      # Perform POST request
+      response = @rpc_conn.post(path) do |req|
+        req.headers['Content-Type'] = 'application/json'
+        # Copy headers excluding SSE-specific ones
+        (@headers.dup.tap do |h|
+          h.delete('Accept')
+          h.delete('Cache-Control')
+        end).each do |k, v|
+          req.headers[k] = v
         end
-      ensure
-        rpc_http.finish if rpc_http.started?
+        req.body = request.to_json
+      end
+      @logger.debug("Received JSON-RPC response: #{response.status} #{response.body}")
+
+      unless response.success?
+        raise MCPClient::Errors::ServerError, "Server returned error: #{response.status} #{response.reason_phrase}"
+      end
+
+      if @use_sse
+        # Wait for result via SSE channel
+        request_id = request[:id]
+        start_time = Time.now
+        timeout = @read_timeout || 10
+        loop do
+          result = nil
+          @mutex.synchronize do
+            result = @sse_results.delete(request_id) if @sse_results.key?(request_id)
+          end
+          return result if result
+          break if Time.now - start_time > timeout
+
+          sleep 0.1
+        end
+        raise MCPClient::Errors::ToolCallError, "Timeout waiting for SSE result for request #{request_id}"
+      else
+        begin
+          data = JSON.parse(response.body)
+          data['result']
+        rescue JSON::ParserError => e
+          raise MCPClient::Errors::TransportError, "Invalid JSON response from server: #{e.message}"
+        end
       end
     end
   end

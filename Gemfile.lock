@@ -10,6 +10,7 @@ PATH
   remote: .
   specs:
     ruby-mcp-client (0.4.1)
+      faraday (~> 2.0)
 
 GEM
   remote: https://rubygems.org/

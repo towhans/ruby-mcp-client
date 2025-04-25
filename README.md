@@ -110,6 +110,61 @@ client.clear_cache
 client.cleanup
 ```
 
+### Server-Sent Events (SSE) Example
+
+The SSE transport provides robust connection handling for remote MCP servers:
+
+```ruby
+require 'mcp_client'
+require 'logger'
+
+# Optional logger for debugging
+logger = Logger.new($stdout)
+logger.level = Logger::INFO
+
+# Create an MCP client that connects to a Playwright MCP server via SSE
+# First run: npx @playwright/mcp@latest --port 8931
+sse_client = MCPClient.create_client(
+  mcp_server_configs: [
+    MCPClient.sse_config(
+      base_url: 'http://localhost:8931/sse',
+      read_timeout: 30,  # Timeout in seconds
+    )
+  ]
+)
+
+# List available tools
+tools = sse_client.list_tools
+
+# Launch a browser
+result = sse_client.call_tool('browser_install', {})
+result = sse_client.call_tool('browser_navigate', { url: 'about:blank' })
+# No browser ID needed with these tool names
+
+# Create a new page
+page_result = sse_client.call_tool('browser_tab_new', {})
+# No page ID needed with these tool names
+
+# Navigate to a website
+sse_client.call_tool('browser_navigate', { url: 'https://example.com' })
+
+# Get page title
+title_result = sse_client.call_tool('browser_snapshot', {})
+puts "Page snapshot: #{title_result}"
+
+# Take a screenshot
+screenshot_result = sse_client.call_tool('browser_take_screenshot', {})
+
+# Ping the server to verify connectivity
+ping_result = sse_client.ping({ echo: "test ping" })
+puts "Ping successful: #{ping_result.inspect}"
+
+# Clean up
+sse_client.cleanup
+```
+
+See `examples/mcp_sse_server_example.rb` for the full Playwright SSE example.
+
 ### Integration Examples
 
 The repository includes examples for integrating with popular AI APIs:
@@ -196,6 +251,7 @@ Complete examples can be found in the `examples/` directory:
 - `ruby_openai_mcp.rb` - Integration with alexrudall/ruby-openai gem
 - `openai_ruby_mcp.rb` - Integration with official openai/openai-ruby gem
 - `ruby_anthropic_mcp.rb` - Integration with alexrudall/ruby-anthropic gem
+- `mcp_sse_server_example.rb` - SSE transport with Playwright MCP
 
 ## MCP Server Compatibility
 
@@ -205,7 +261,20 @@ This client works with any MCP-compatible server, including:
 - [@playwright/mcp](https://www.npmjs.com/package/@playwright/mcp) - Browser automation
 - Custom servers implementing the MCP protocol
 
-### Server Implementation Features
+## Key Features
+
+### Client Features
+
+- **Multiple transports** - Support for both stdio and SSE transports
+- **Multiple servers** - Connect to multiple MCP servers simultaneously
+- **Tool discovery** - Find tools by name or pattern
+- **Atomic tool calls** - Simple API for invoking tools with parameters
+- **Batch support** - Call multiple tools in a single operation
+- **API conversions** - Built-in format conversion for OpenAI and Anthropic APIs
+- **Thread safety** - Synchronized access for thread-safe operation
+- **Server notifications** - Support for JSON-RPC notifications
+- **Custom RPC methods** - Send any custom JSON-RPC method
+- **Consistent error handling** - Rich error types for better exception handling
 
 ### Server-Sent Events (SSE) Implementation
 
@@ -226,7 +295,7 @@ The SSE client implementation provides these key features:
 
 ## Requirements
 
-- Ruby >= 2.7.0
+- Ruby >= 3.2.0
 - No runtime dependencies
 
 ## Implementing an MCP Server

@@ -96,17 +96,24 @@ RSpec.describe MCPClient::ServerSSE do
       end
       # Disable SSE transport for testing synchronous HTTP fallback
       server.instance_variable_set(:@use_sse, false)
-      # Stub HTTP JSON-RPC request for tools/list
-      stub_request(:post, "#{base_url.sub(%r{/sse/?$}, '')}/messages")
-        .with(
-          headers: { 'Content-Type' => 'application/json' },
-          body: %r{tools/list}
-        )
-        .to_return(
-          status: 200,
-          body: { result: { tools: [tool_data] } }.to_json,
-          headers: { 'Content-Type' => 'application/json' }
-        )
+
+      # Create a Faraday connection stub to avoid real HTTP requests
+      faraday_stubs = Faraday::Adapter::Test::Stubs.new
+      faraday_conn = Faraday.new do |builder|
+        builder.adapter :test, faraday_stubs
+      end
+
+      # Stub the Faraday response for tools/list
+      faraday_stubs.post('/messages') do |env|
+        if env.body.include?('tools/list')
+          [200, { 'Content-Type' => 'application/json' }, { result: { tools: [tool_data] } }.to_json]
+        else
+          [404, {}, 'Not Found']
+        end
+      end
+
+      # Set the stubbed connection
+      server.instance_variable_set(:@rpc_conn, faraday_conn)
     end
 
     it 'connects if not already connected' do
@@ -128,12 +135,17 @@ RSpec.describe MCPClient::ServerSSE do
     end
 
     it 'raises ToolCallError on non-success response' do
-      stub_request(:post, "#{base_url.sub(%r{/sse/?$}, '')}/messages")
-        .with(
-          headers: { 'Content-Type' => 'application/json' },
-          body: %r{tools/list}
-        )
-        .to_return(status: 500, body: 'Server Error')
+      # Create error response stub
+      faraday_stubs = Faraday::Adapter::Test::Stubs.new
+      faraday_conn = Faraday.new do |builder|
+        builder.adapter :test, faraday_stubs
+      end
+
+      faraday_stubs.post('/messages') do |_env|
+        [500, {}, 'Server Error']
+      end
+
+      server.instance_variable_set(:@rpc_conn, faraday_conn)
 
       expect { server.list_tools }.to raise_error(MCPClient::Errors::ToolCallError, /Error listing tools/)
     end
@@ -147,7 +159,8 @@ RSpec.describe MCPClient::ServerSSE do
     end
 
     it 'raises ToolCallError on other errors' do
-      allow_any_instance_of(Net::HTTP).to receive(:request).and_raise(StandardError.new('Network failure'))
+      # Create standard error stub
+      allow(server).to receive(:request_tools_list).and_raise(StandardError.new('Network failure'))
       expect { server.list_tools }.to raise_error(MCPClient::Errors::ToolCallError, /Error listing tools/)
     end
   end
@@ -167,17 +180,24 @@ RSpec.describe MCPClient::ServerSSE do
       end
       # Disable SSE transport for testing synchronous HTTP fallback
       server.instance_variable_set(:@use_sse, false)
-      # Stub HTTP JSON-RPC request for tools/call
-      stub_request(:post, "#{base_url.sub(%r{/sse/?$}, '')}/messages")
-        .with(
-          headers: { 'Content-Type' => 'application/json' },
-          body: %r{tools/call.*#{tool_name}}
-        )
-        .to_return(
-          status: 200,
-          body: { result: result }.to_json,
-          headers: { 'Content-Type' => 'application/json' }
-        )
+
+      # Create a Faraday connection stub to avoid real HTTP requests
+      faraday_stubs = Faraday::Adapter::Test::Stubs.new
+      faraday_conn = Faraday.new do |builder|
+        builder.adapter :test, faraday_stubs
+      end
+
+      # Stub the Faraday response for tools/call
+      faraday_stubs.post('/messages') do |env|
+        if env.body.include?('tools/call') && env.body.include?(tool_name)
+          [200, { 'Content-Type' => 'application/json' }, { result: result }.to_json]
+        else
+          [404, {}, 'Not Found']
+        end
+      end
+
+      # Set the stubbed connection
+      server.instance_variable_set(:@rpc_conn, faraday_conn)
     end
 
     it 'connects if not already connected' do
@@ -193,12 +213,17 @@ RSpec.describe MCPClient::ServerSSE do
     end
 
     it 'raises ToolCallError on non-success response' do
-      stub_request(:post, "#{base_url.sub(%r{/sse/?$}, '')}/messages")
-        .with(
-          headers: { 'Content-Type' => 'application/json' },
-          body: %r{tools/call.*#{tool_name}}
-        )
-        .to_return(status: 500, body: 'Server Error')
+      # Create error response stub
+      faraday_stubs = Faraday::Adapter::Test::Stubs.new
+      faraday_conn = Faraday.new do |builder|
+        builder.adapter :test, faraday_stubs
+      end
+
+      faraday_stubs.post('/messages') do |_env|
+        [500, {}, 'Server Error']
+      end
+
+      server.instance_variable_set(:@rpc_conn, faraday_conn)
 
       expect do
         server.call_tool(tool_name, parameters)
@@ -216,7 +241,8 @@ RSpec.describe MCPClient::ServerSSE do
     end
 
     it 'raises ToolCallError on other errors' do
-      allow_any_instance_of(Net::HTTP).to receive(:request).and_raise(StandardError.new('Network failure'))
+      # Directly raise during send_jsonrpc_request
+      allow(server).to receive(:send_jsonrpc_request).and_raise(StandardError.new('Network failure'))
       expect do
         server.call_tool(tool_name, parameters)
       end.to raise_error(MCPClient::Errors::ToolCallError, /Error calling tool/)
@@ -286,6 +312,142 @@ RSpec.describe MCPClient::ServerSSE do
       params = { foo: 'bar' }
       allow(server).to receive(:rpc_request).with('ping', params).and_return({ 'status' => 'ok' })
       expect(server.ping(params)).to eq({ 'status' => 'ok' })
+    end
+  end
+
+  describe '#rpc_request' do
+    before do
+      allow(server).to receive(:connect) do
+        server.instance_variable_set(:@connection_established, true)
+      end
+      allow(server).to receive(:perform_initialize) do
+        server.instance_variable_set(:@initialized, true)
+      end
+      server.instance_variable_set(:@use_sse, false)
+
+      # Create a Faraday connection stub to avoid real HTTP requests
+      @faraday_stubs = Faraday::Adapter::Test::Stubs.new
+      faraday_conn = Faraday.new do |builder|
+        builder.adapter :test, @faraday_stubs
+      end
+
+      # Default successful response
+      @faraday_stubs.post('/messages') do |env|
+        if env.body.include?('test_method')
+          [200, { 'Content-Type' => 'application/json' }, { result: { test: 'result' } }.to_json]
+        else
+          [404, {}, 'Not Found']
+        end
+      end
+
+      server.instance_variable_set(:@rpc_conn, faraday_conn)
+    end
+
+    it 'sends a JSON-RPC request with the given method and parameters' do
+      result = server.rpc_request('test_method', { param: 'value' })
+      expect(result).to eq({ 'test' => 'result' })
+    end
+
+    it 'retries transient errors' do
+      server.instance_variable_set(:@max_retries, 2)
+      server.instance_variable_set(:@retry_backoff, 0.01) # Speed up tests
+
+      # Create new faraday stubs that will fail then succeed
+      retry_stubs = Faraday::Adapter::Test::Stubs.new
+      retry_conn = Faraday.new do |builder|
+        builder.adapter :test, retry_stubs
+      end
+
+      # First call fails, second succeeds
+      call_count = 0
+      retry_stubs.post('/messages') do |_env|
+        call_count += 1
+        if call_count == 1
+          [500, {}, 'Server Error']
+        else
+          [200, { 'Content-Type' => 'application/json' }, { result: { success: true } }.to_json]
+        end
+      end
+
+      server.instance_variable_set(:@rpc_conn, retry_conn)
+
+      result = server.rpc_request('test_method', { param: 'value' })
+      expect(result).to eq({ 'success' => true })
+    end
+
+    it 'gives up after max retries' do
+      server.instance_variable_set(:@max_retries, 1)
+      server.instance_variable_set(:@retry_backoff, 0.01) # Speed up tests
+
+      # Create new faraday stubs that will always fail
+      fail_stubs = Faraday::Adapter::Test::Stubs.new
+      fail_conn = Faraday.new do |builder|
+        builder.adapter :test, fail_stubs
+      end
+
+      # Always return 500 error
+      fail_stubs.post('/messages') do |_env|
+        [500, {}, 'Server Error']
+      end
+
+      server.instance_variable_set(:@rpc_conn, fail_conn)
+
+      expect do
+        server.rpc_request('test_method', { param: 'value' })
+      end.to raise_error(MCPClient::Errors::ServerError)
+    end
+  end
+
+  describe '#rpc_notify' do
+    before do
+      server.instance_variable_set(:@session_id, 'test_session')
+      # Skip initialization in the tests
+      allow(server).to receive(:ensure_initialized).and_return(true)
+      # Let's mock the actual HTTP request since this doesn't use Faraday
+      @mock_http = instance_double(Net::HTTP)
+      allow(Net::HTTP).to receive(:new).and_return(@mock_http)
+      allow(@mock_http).to receive(:use_ssl=)
+      allow(@mock_http).to receive(:verify_mode=)
+      allow(@mock_http).to receive(:open_timeout=)
+      allow(@mock_http).to receive(:read_timeout=)
+      allow(@mock_http).to receive(:keep_alive_timeout=)
+      allow(@mock_http).to receive(:started?).and_return(false)
+      allow(@mock_http).to receive(:start).and_yield(@mock_http)
+      allow(@mock_http).to receive(:finish)
+    end
+
+    it 'sends a JSON-RPC notification with the given method and parameters' do
+      mock_response = instance_double(Net::HTTPSuccess)
+      allow(mock_response).to receive(:is_a?).with(Net::HTTPSuccess).and_return(true)
+
+      expect(@mock_http).to receive(:request) do |request|
+        expect(request.body).to include('"method":"test_notify"')
+        expect(request.body).to include('"params":{"param":"value"}')
+        mock_response
+      end
+
+      server.rpc_notify('test_notify', { param: 'value' })
+    end
+
+    it 'raises TransportError when response is not successful' do
+      mock_response = instance_double(Net::HTTPClientError)
+      allow(mock_response).to receive(:is_a?).with(Net::HTTPSuccess).and_return(false)
+      allow(mock_response).to receive(:code).and_return('500')
+      allow(mock_response).to receive(:message).and_return('Server Error')
+
+      allow(@mock_http).to receive(:request).and_return(mock_response)
+
+      expect do
+        server.rpc_notify('test_notify', { param: 'value' })
+      end.to raise_error(MCPClient::Errors::TransportError, /Failed to send notification/)
+    end
+
+    it 'raises TransportError on network failures' do
+      allow(@mock_http).to receive(:request).and_raise(Errno::ECONNRESET)
+
+      expect do
+        server.rpc_notify('test_notify', { param: 'value' })
+      end.to raise_error(MCPClient::Errors::TransportError, /Failed to send notification/)
     end
   end
 end
