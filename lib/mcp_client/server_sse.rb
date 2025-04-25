@@ -11,7 +11,7 @@ module MCPClient
   # Implementation of MCP server that communicates via Server-Sent Events (SSE)
   # Useful for communicating with remote MCP servers over HTTP
   class ServerSSE < ServerBase
-    attr_reader :base_url, :tools, :session_id, :server_info, :capabilities
+    attr_reader :base_url, :tools, :server_info, :capabilities
 
     # @param base_url [String] The base URL of the MCP server
     # @param headers [Hash] Additional headers to include in requests
@@ -36,7 +36,7 @@ module MCPClient
       # HTTP client is managed via Faraday
       @tools = nil
       @read_timeout = read_timeout
-      @session_id = nil
+
       # SSE-provided JSON-RPC endpoint path for POST requests
       @rpc_endpoint = nil
       @tools_data = nil
@@ -169,7 +169,6 @@ module MCPClient
         end
 
         @tools = nil
-        @session_id = nil
         @connection_established = false
         @sse_connected = false
       end
@@ -196,7 +195,7 @@ module MCPClient
       ensure_initialized
       uri = URI.parse(@base_url)
       base = "#{uri.scheme}://#{uri.host}:#{uri.port}"
-      rpc_ep = @mutex.synchronize { @rpc_endpoint } || "/messages?sessionId=#{@session_id}"
+      rpc_ep = @mutex.synchronize { @rpc_endpoint }
       @rpc_conn ||= Faraday.new(url: base) do |f|
         f.request :retry, max: @max_retries, interval: @retry_backoff, backoff_factor: 2
         f.options.open_timeout = @read_timeout
@@ -316,7 +315,6 @@ module MCPClient
         ep = event[:data]
         @mutex.synchronize do
           @rpc_endpoint = ep
-          @session_id = ep.split('sessionId=').last if ep.include?('sessionId=')
           @connection_established = true
           @connection_cv.broadcast
         end
@@ -435,15 +433,7 @@ module MCPClient
       @logger.debug("Sending JSON-RPC request: #{request.to_json}")
       uri = URI.parse(@base_url)
       base = "#{uri.scheme}://#{uri.host}:#{uri.port}"
-      rpc_ep     = @mutex.synchronize { @rpc_endpoint }
-      session_id = @mutex.synchronize { @session_id }
-      path = if rpc_ep
-               rpc_ep
-             elsif session_id
-               "/messages?sessionId=#{session_id}"
-             else
-               '/messages'
-             end
+      rpc_ep = @mutex.synchronize { @rpc_endpoint }
 
       @rpc_conn ||= Faraday.new(url: base) do |f|
         f.request :retry, max: @max_retries, interval: @retry_backoff, backoff_factor: 2
@@ -452,7 +442,7 @@ module MCPClient
         f.adapter Faraday.default_adapter
       end
 
-      response = @rpc_conn.post(path) do |req|
+      response = @rpc_conn.post(rpc_ep) do |req|
         req.headers['Content-Type'] = 'application/json'
         req.headers['Accept'] = 'application/json'
         (@headers.dup.tap do |h|

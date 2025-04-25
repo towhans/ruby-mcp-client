@@ -107,9 +107,12 @@ RSpec.describe MCPClient::ServerSSE do
         builder.adapter :test, faraday_stubs
       end
 
+      server.instance_variable_set(:@rpc_endpoint, '/rpc')
+
       # Stub the Faraday response for tools/list
-      faraday_stubs.post('/messages') do |env|
-        if env.body.include?('tools/list')
+      faraday_stubs.post('/rpc') do |env|
+        request_body = JSON.parse(env.body)
+        if request_body['method'] == 'tools/list'
           [200, { 'Content-Type' => 'application/json' }, { result: { tools: [tool_data] } }.to_json]
         else
           [404, {}, 'Not Found']
@@ -206,9 +209,12 @@ RSpec.describe MCPClient::ServerSSE do
         builder.adapter :test, faraday_stubs
       end
 
+      server.instance_variable_set(:@rpc_endpoint, '/rpc')
+
       # Stub the Faraday response for tools/call
-      faraday_stubs.post('/messages') do |env|
-        if env.body.include?('tools/call') && env.body.include?(tool_name)
+      faraday_stubs.post('/rpc') do |env|
+        request_body = JSON.parse(env.body)
+        if request_body['method'] == 'tools/call' && request_body['params']['name'] == tool_name
           [200, { 'Content-Type' => 'application/json' }, { result: result }.to_json]
         else
           [404, {}, 'Not Found']
@@ -275,7 +281,7 @@ RSpec.describe MCPClient::ServerSSE do
       server.instance_variable_set(:@connection_established, true)
       server.instance_variable_set(:@sse_connected, true)
       server.instance_variable_set(:@tools, [double('tool')])
-      server.instance_variable_set(:@session_id, 'test-session')
+
 
       # Call cleanup and verify state
       server.cleanup
@@ -284,7 +290,6 @@ RSpec.describe MCPClient::ServerSSE do
       expect(server.instance_variable_get(:@connection_established)).to be false
       expect(server.instance_variable_get(:@sse_connected)).to be false
       expect(server.instance_variable_get(:@tools)).to be_nil
-      expect(server.instance_variable_get(:@session_id)).to be_nil
     end
   end
 
@@ -355,9 +360,10 @@ RSpec.describe MCPClient::ServerSSE do
         builder.adapter :test, @faraday_stubs
       end
 
-      # Default successful response
-      @faraday_stubs.post('/messages') do |env|
-        if env.body.include?('test_method')
+      server.instance_variable_set(:@rpc_endpoint, '/rpc')
+      @faraday_stubs.post('/rpc') do |env|
+        request_body = JSON.parse(env.body)
+        if request_body['method'] == 'test_method'
           [200, { 'Content-Type' => 'application/json' }, { result: { test: 'result' } }.to_json]
         else
           [404, {}, 'Not Found']
@@ -384,7 +390,7 @@ RSpec.describe MCPClient::ServerSSE do
 
       # First call fails, second succeeds
       call_count = 0
-      retry_stubs.post('/messages') do |_env|
+      retry_stubs.post('/rpc') do |_env|
         call_count += 1
         if call_count == 1
           [500, {}, 'Server Error']
@@ -410,7 +416,7 @@ RSpec.describe MCPClient::ServerSSE do
       end
 
       # Always return 500 error
-      fail_stubs.post('/messages') do |_env|
+      fail_stubs.post('/rpc') do |_env|
         [500, {}, 'Server Error']
       end
 
