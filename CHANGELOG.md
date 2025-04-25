@@ -1,5 +1,13 @@
 # Changelog
 
+## 0.5.0 (2025-04-25)
+
+- Enhanced SSE implementation and added Faraday HTTP support
+- Updates for the HTTP client and endpoints
+- Updates session handling
+- Remove parameters from ping
+- Code improvements
+
 ## 0.4.1 (2025-04-24)
 
 - Server ping functionality
