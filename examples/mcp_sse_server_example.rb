@@ -1,31 +1,24 @@
 #!/usr/bin/env ruby
 # frozen_string_literal: true
 
-# MCPClient integration example using the openai/openai-ruby gem
+# Example demonstrating MCPClient with Playwright MCP server via Server-Sent Events (SSE)
+#
+# Usage:
+#  1. Start Playwright MCP server: npx @playwright/mcp@latest --port 8931
+#  2. Run this example: ruby mcp_sse_server_example.rb
+#
 require_relative '../lib/mcp_client'
 require 'bundler/setup'
 require 'json'
 require 'logger'
-
-# This example shows how to work with a Playwright MCP server via Server-Sent Events (SSE)
-# Connect to Playwright MCP with: npx @playwright/mcp@latest --port 8931
 
 # Create a logger for debugging (optional)
 logger = Logger.new($stdout)
 logger.level = Logger::INFO
 
 # Create an MCP client that connects to the Playwright MCP server over SSE
-sse_client = MCPClient.create_client(
-  mcp_server_configs: [
-    # Local Playwright MCP SSE server
-    MCPClient.sse_config(
-      base_url: 'http://localhost:8931/sse',
-      read_timeout: 30, # Timeout in seconds
-      retries: 3,       # Number of retry attempts
-      retry_backoff: 1  # Backoff delay in seconds
-    )
-  ]
-)
+# The server definition is loaded from a JSON file for better maintainability
+sse_client = MCPClient.create_client(server_definition_file: './playwright_server_definition.json')
 
 puts 'Connected to Playwright MCP server with SSE transport'
 

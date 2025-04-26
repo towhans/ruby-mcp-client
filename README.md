@@ -56,9 +56,21 @@ client = MCPClient.create_client(
       retries: 3,       # Optional number of retry attempts (default: 0)
       retry_backoff: 1  # Optional backoff delay in seconds (default: 1)
       # Native support for tool streaming via call_tool_streaming method
-    )
-  ]
+)  ]
 )
+
+# Or load server definitions from a JSON file
+client = MCPClient.create_client(
+  server_definition_file: 'path/to/server_definition.json'
+)
+
+# MCP server configuration JSON format can be:
+# 1. A single server object: 
+#    { "type": "sse", "url": "http://example.com/sse" }
+# 2. An array of server objects: 
+#    [{ "type": "stdio", "command": "npx server" }, { "type": "sse", "url": "http://..." }]
+# 3. An object with "mcpServers" key containing named servers:
+#    { "mcpServers": { "server1": { "type": "sse", "url": "http://..." } } }
 
 # List available tools
 tools = client.list_tools
@@ -260,6 +272,62 @@ This client works with any MCP-compatible server, including:
 - [@playwright/mcp](https://www.npmjs.com/package/@playwright/mcp) - Browser automation
 - Custom servers implementing the MCP protocol
 
+### Server Definition Files
+
+You can define MCP server configurations in JSON files for easier management:
+
+```json
+{
+  "mcpServers": {
+    "playwright": {
+      "type": "sse",
+      "url": "http://localhost:8931/sse",
+      "headers": {
+        "Authorization": "Bearer TOKEN"
+      }
+    },
+    "filesystem": {
+      "type": "stdio",
+      "command": "npx",
+      "args": ["-y", "@modelcontextprotocol/server-filesystem", "/path/to/dir"],
+      "env": {
+        "DEBUG": "true"
+      }
+    }
+  }
+}
+```
+
+A simpler example used in the Playwright demo (found in `examples/playwright_server_definition.json`):
+
+```json
+{
+  "mcpServers": {
+    "playwright": {
+      "url": "http://localhost:8931/sse",
+      "headers": {},
+      "comment": "Local Playwright MCP Server running on port 8931"
+    }
+  }
+}
+```
+
+Load this configuration with:
+
+```ruby
+client = MCPClient.create_client(server_definition_file: 'path/to/definition.json')
+```
+
+The JSON format supports:
+1. A single server object: `{ "type": "sse", "url": "..." }`
+2. An array of server objects: `[{ "type": "stdio", ... }, { "type": "sse", ... }]`
+3. An object with named servers under `mcpServers` key (as shown above)
+
+Special configuration options:
+- `comment` and `description` are reserved keys that are ignored during parsing and can be used for documentation
+- Server type can be inferred from the presence of either `command` (for stdio) or `url` (for SSE)
+- All string values in arrays (like `args`) are automatically converted to strings
+
 ## Key Features
 
 ### Client Features
@@ -274,6 +342,7 @@ This client works with any MCP-compatible server, including:
 - **Server notifications** - Support for JSON-RPC notifications
 - **Custom RPC methods** - Send any custom JSON-RPC method
 - **Consistent error handling** - Rich error types for better exception handling
+- **JSON configuration** - Support for server definition files in JSON format
 
 ### Server-Sent Events (SSE) Implementation
 
