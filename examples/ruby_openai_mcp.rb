@@ -16,7 +16,14 @@ abort 'Please set OPENAI_API_KEY' unless api_key
 logger = Logger.new($stdout)
 logger.level = Logger::WARN
 mcp_client = MCPClient::Client.new(
-  mcp_server_configs: [MCPClient.sse_config(base_url: 'http://localhost:8931/sse')],
+  mcp_server_configs: [
+    MCPClient.sse_config(
+      base_url: 'http://localhost:8931/sse',
+      read_timeout: 30, # Optional timeout in seconds
+      retries: 3,       # Optional number of retry attempts
+      retry_backoff: 1  # Optional backoff delay in seconds
+    )
+  ],
   logger: logger
 )
 

@@ -35,13 +35,17 @@ module MCPClient
   # @param base_url [String] base URL for the server
   # @param headers [Hash] HTTP headers to include in requests
   # @param read_timeout [Integer] read timeout in seconds (default: 30)
+  # @param retries [Integer] number of retry attempts (default: 0)
+  # @param retry_backoff [Integer] backoff delay in seconds (default: 1)
   # @return [Hash] server configuration
-  def self.sse_config(base_url:, headers: {}, read_timeout: 30)
+  def self.sse_config(base_url:, headers: {}, read_timeout: 30, retries: 0, retry_backoff: 1)
     {
       type: 'sse',
       base_url: base_url,
       headers: headers,
-      read_timeout: read_timeout
+      read_timeout: read_timeout,
+      retries: retries,
+      retry_backoff: retry_backoff
     }
   end
 end

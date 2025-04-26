@@ -15,9 +15,17 @@ logger = Logger.new($stdout)
 logger.level = Logger::WARN
 mcp_client = MCPClient::Client.new(
   mcp_server_configs: [
+    # Example with stdio configuration
     MCPClient.stdio_config(
       command: %W[npx -y @modelcontextprotocol/server-filesystem #{Dir.pwd}]
     )
+    # Example with SSE configuration (commented out - uncomment to use)
+    # MCPClient.sse_config(
+    #   base_url: 'http://localhost:8931/sse',
+    #   read_timeout: 30, # Optional timeout in seconds (default: 30)
+    #   retries: 3,       # Optional number of retry attempts (default: 0)
+    #   retry_backoff: 1  # Optional backoff delay in seconds (default: 1)
+    # )
   ],
   logger: logger
 )

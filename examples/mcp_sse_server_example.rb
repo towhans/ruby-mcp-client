@@ -20,7 +20,9 @@ sse_client = MCPClient.create_client(
     # Local Playwright MCP SSE server
     MCPClient.sse_config(
       base_url: 'http://localhost:8931/sse',
-      read_timeout: 30 # Timeout in seconds
+      read_timeout: 30, # Timeout in seconds
+      retries: 3,       # Number of retry attempts
+      retry_backoff: 1  # Backoff delay in seconds
     )
   ]
 )
