@@ -1,5 +1,9 @@
 # Changelog
 
+## 0.5.1 (2025-04-26)
+
+- Support for server definition files in JSON format
+
 ## 0.5.0 (2025-04-25)
 
 - Enhanced SSE implementation and added Faraday HTTP support
