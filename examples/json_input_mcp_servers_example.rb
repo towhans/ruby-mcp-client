@@ -5,7 +5,7 @@
 #
 # Usage:
 #  1. Start Playwright MCP server: npx @playwright/mcp@latest --port 8931
-#  2. Run this example: ruby mcp_sse_server_example.rb
+#  2. Run this example: ruby json_input_mcp_servers_example.rb
 #
 require_relative '../lib/mcp_client'
 require 'bundler/setup'
@@ -18,7 +18,7 @@ logger.level = Logger::INFO
 
 # Create an MCP client that connects to the Playwright MCP server over SSE
 # The server definition is loaded from a JSON file for better maintainability
-sse_client = MCPClient.create_client(server_definition_file: './playwright_server_definition.json')
+sse_client = MCPClient.create_client(server_definition_file: './sample_server_definition.json')
 
 puts 'Connected to Playwright MCP server with SSE transport'
 

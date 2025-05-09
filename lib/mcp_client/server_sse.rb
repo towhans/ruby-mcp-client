@@ -131,25 +131,17 @@ module MCPClient
     # @return [Boolean] true if connection was successful
     # @raise [MCPClient::Errors::ConnectionError] if connection fails
     def connect
-      @mutex.synchronize do
-        return true if @connection_established
+      return true if @mutex.synchronize { @connection_established }
 
-        # Start SSE listener using Faraday HTTP client
+      begin
         start_sse_thread
-
-        timeout = 10
-        success = @connection_cv.wait(timeout) { @connection_established }
-
-        unless success
-          cleanup
-          raise MCPClient::Errors::ConnectionError, 'Timed out waiting for SSE connection to be established'
-        end
-
-        @connection_established
+        effective_timeout = [@read_timeout || 30, 30].min
+        wait_for_connection(timeout: effective_timeout)
+        true
+      rescue StandardError => e
+        cleanup
+        raise MCPClient::Errors::ConnectionError, "Failed to connect to MCP server at #{@base_url}: #{e.message}"
       end
-    rescue StandardError => e
-      cleanup
-      raise MCPClient::Errors::ConnectionError, "Failed to connect to MCP server at #{@base_url}: #{e.message}"
     end
 
     # Clean up the server connection
@@ -222,6 +214,25 @@ module MCPClient
 
     private
 
+    # Wait for SSE connection to be established with periodic checks
+    # @param timeout [Integer] Maximum time to wait in seconds
+    # @raise [MCPClient::Errors::ConnectionError] if timeout expires
+    def wait_for_connection(timeout:)
+      @mutex.synchronize do
+        deadline = Time.now + timeout
+
+        until @connection_established
+          remaining = [1, deadline - Time.now].min
+          break if remaining <= 0 || @connection_cv.wait(remaining) { @connection_established }
+        end
+
+        unless @connection_established
+          cleanup
+          raise MCPClient::Errors::ConnectionError, 'Timed out waiting for SSE connection to be established'
+        end
+      end
+    end
+
     # Ensure SSE initialization handshake has been performed
     def ensure_initialized
       return if @initialized
@@ -265,20 +276,28 @@ module MCPClient
         @sse_conn ||= Faraday.new(url: sse_base) do |f|
           f.options.open_timeout = 10
           f.options.timeout = nil
+          f.request :retry, max: @max_retries, interval: @retry_backoff, backoff_factor: 2
           f.adapter Faraday.default_adapter
+        end
+
+        # Reset connection state
+        @mutex.synchronize do
+          @sse_connected = false
+          @connection_established = false
         end
 
         @sse_conn.get(sse_path) do |req|
           @headers.each { |k, v| req.headers[k] = v }
           req.options.on_data = proc do |chunk, _bytes|
-            @logger.debug("SSE chunk received: #{chunk.inspect}")
-            process_sse_chunk(chunk.dup)
+            process_sse_chunk(chunk.dup) if chunk && !chunk.empty?
           end
         end
-      rescue StandardError
-        # On any SSE thread error, signal connection established to unblock connect
+      rescue StandardError => e
+        @logger.error("SSE connection error: #{e.message}")
+
+        # Signal connect method to avoid deadlock
         @mutex.synchronize do
-          @connection_established = true
+          @connection_established = false
           @connection_cv.broadcast
         end
       ensure
@@ -290,18 +309,21 @@ module MCPClient
     # @param chunk [String] the chunk to process
     def process_sse_chunk(chunk)
       @logger.debug("Processing SSE chunk: #{chunk.inspect}")
-      local_buffer = nil
 
+      event_buffers = nil
       @mutex.synchronize do
         @buffer += chunk
 
+        # Extract all complete events from the buffer
+        event_buffers = []
         while (event_end = @buffer.index("\n\n"))
           event_data = @buffer.slice!(0, event_end + 2)
-          local_buffer = event_data
+          event_buffers << event_data
         end
       end
 
-      parse_and_handle_sse_event(local_buffer) if local_buffer
+      # Process extracted events outside the mutex to avoid deadlocks
+      event_buffers&.each { |event_data| parse_and_handle_sse_event(event_data) }
     end
 
     # Parse and handle an SSE event
@@ -315,22 +337,31 @@ module MCPClient
         ep = event[:data]
         @mutex.synchronize do
           @rpc_endpoint = ep
+          @sse_connected = true
           @connection_established = true
           @connection_cv.broadcast
         end
+      when 'ping'
+        # Received ping event, no action needed
       when 'message'
+        return if event[:data].empty?
+
         begin
           data = JSON.parse(event[:data])
-          # Dispatch JSON-RPC notifications (no id, has method)
+
+          # Handle JSON-RPC notifications (no id, has method)
           if data['method'] && !data.key?('id')
             @notification_callback&.call(data['method'], data['params'])
             return
           end
 
-          @mutex.synchronize do
-            @tools_data = data['result']['tools'] if data['result'] && data['result']['tools']
+          # Handle JSON-RPC responses
+          if data['id']
+            @mutex.synchronize do
+              # Store tools data if present
+              @tools_data = data['result']['tools'] if data['result'] && data['result']['tools']
 
-            if data['id']
+              # Store response for the waiting request
               if data['error']
                 @sse_results[data['id']] = {
                   'isError' => true,
@@ -341,8 +372,8 @@ module MCPClient
               end
             end
           end
-        rescue JSON::ParserError
-          nil
+        rescue JSON::ParserError => e
+          @logger.warn("Failed to parse JSON from event data: #{e.message}")
         end
       end
     end
@@ -351,13 +382,18 @@ module MCPClient
     # @param event_data [String] the event data to parse
     # @return [Hash, nil] the parsed event, or nil if the event is invalid
     def parse_sse_event(event_data)
-      @logger.debug("Parsing SSE event data: #{event_data.inspect}")
       event = { event: 'message', data: '', id: nil }
       data_lines = []
+      has_content = false
 
       event_data.each_line do |line|
         line = line.chomp
         next if line.empty?
+
+        # Skip SSE comments (lines starting with colon)
+        next if line.start_with?(':')
+
+        has_content = true
 
         if line.start_with?('event:')
           event[:event] = line[6..].strip
@@ -369,8 +405,9 @@ module MCPClient
       end
 
       event[:data] = data_lines.join("\n")
-      @logger.debug("Parsed SSE event: #{event.inspect}")
-      event[:data].empty? ? nil : event
+
+      # Return the event even if data is empty as long as we had non-comment content
+      has_content ? event : nil
     end
 
     # Request the tools list using JSON-RPC

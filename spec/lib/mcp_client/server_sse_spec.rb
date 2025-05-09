@@ -87,6 +87,43 @@ RSpec.describe MCPClient::ServerSSE do
 
       expect { server.connect }.to raise_error(MCPClient::Errors::ConnectionError, /Failed to connect/)
     end
+
+    it 'times out if connection is not established' do
+      # Mock the thread with proper behavior
+      thread_double = double('thread', alive?: true)
+      allow(thread_double).to receive(:kill)
+      allow(Thread).to receive(:new).and_return(thread_double)
+
+      # Set a short timeout for the test
+      server.instance_variable_set(:@read_timeout, 0.1)
+
+      # Reset connection state
+      server.instance_variable_set(:@connection_established, false)
+
+      expect { server.connect }.to raise_error(MCPClient::Errors::ConnectionError, /Timed out waiting/)
+    end
+
+    it 'waits with periodic checks until connection is established' do
+      # Mock the thread creation to prevent actual connection attempts
+      allow(Thread).to receive(:new).and_return(double('thread', alive?: true))
+
+      # Set up a counter to track wait calls
+      wait_count = 0
+
+      # Stub the condition variable to set connection_established only after multiple waits
+      allow_any_instance_of(MonitorMixin::ConditionVariable).to receive(:wait) do |_timeout, &block|
+        wait_count += 1
+        if wait_count >= 3
+          server.instance_variable_set(:@connection_established, true)
+          block.call
+        else
+          false
+        end
+      end
+
+      expect(server.connect).to eq true
+      expect(wait_count).to eq 3
+    end
   end
 
   describe '#list_tools' do
@@ -490,6 +527,125 @@ RSpec.describe MCPClient::ServerSSE do
       expect do
         server.rpc_notify('test_notify', { param: 'value' })
       end.to raise_error(MCPClient::Errors::TransportError, /Failed to send notification/)
+    end
+  end
+
+  describe '#parse_sse_event' do
+    it 'parses event data correctly' do
+      event_data = "event: endpoint\ndata: /messages\n\n"
+      event = server.send(:parse_sse_event, event_data)
+
+      expect(event).to be_a(Hash)
+      expect(event[:event]).to eq('endpoint')
+      expect(event[:data]).to eq('/messages')
+    end
+
+    it 'handles empty data in events' do
+      event_data = "event: ping\n\n"
+      event = server.send(:parse_sse_event, event_data)
+
+      expect(event).to be_a(Hash)
+      expect(event[:event]).to eq('ping')
+      expect(event[:data]).to eq('')
+    end
+
+    it 'skips comment lines' do
+      event_data = ": This is a comment\nevent: message\ndata: actual data\n\n"
+      event = server.send(:parse_sse_event, event_data)
+
+      expect(event[:event]).to eq('message')
+      expect(event[:data]).to eq('actual data')
+    end
+
+    it 'returns nil for comment-only events' do
+      event_data = ": keep-alive 1\n\n"
+      event = server.send(:parse_sse_event, event_data)
+
+      expect(event).to be_nil
+    end
+
+    it 'handles multi-line data' do
+      event_data = "event: message\ndata: line 1\ndata: line 2\n\n"
+      event = server.send(:parse_sse_event, event_data)
+
+      expect(event[:event]).to eq('message')
+      expect(event[:data]).to eq("line 1\nline 2")
+    end
+  end
+
+  describe '#process_sse_chunk' do
+    it 'processes multiple events in a single chunk' do
+      chunk = "event: endpoint\ndata: /messages\n\nevent: message\ndata: {\"id\":1}\n\n"
+
+      # Expect parse_and_handle_sse_event to be called twice, once for each event
+      expect(server).to receive(:parse_and_handle_sse_event).twice
+
+      server.send(:process_sse_chunk, chunk)
+    end
+
+    it 'accumulates partial chunks' do
+      # Send a partial chunk first
+      partial_chunk = "event: endpoint\ndata: /messages"
+      server.send(:process_sse_chunk, partial_chunk)
+
+      # Complete the event with a second chunk
+      completion_chunk = "\n\n"
+
+      # Expect parse_and_handle_sse_event to be called once when the event is complete
+      expect(server).to receive(:parse_and_handle_sse_event).once
+
+      server.send(:process_sse_chunk, completion_chunk)
+    end
+  end
+
+  describe '#parse_and_handle_sse_event' do
+    it 'handles endpoint events' do
+      event_data = "event: endpoint\ndata: /messages\n\n"
+
+      # Set initial state
+      server.instance_variable_set(:@connection_established, false)
+
+      server.send(:parse_and_handle_sse_event, event_data)
+
+      # Verify the state changes
+      expect(server.instance_variable_get(:@connection_established)).to eq(true)
+      expect(server.instance_variable_get(:@rpc_endpoint)).to eq('/messages')
+    end
+
+    it 'handles empty message events' do
+      event_data = "event: message\ndata: \n\n"
+
+      # Should not raise an error
+      expect do
+        server.send(:parse_and_handle_sse_event, event_data)
+      end.not_to raise_error
+    end
+
+    it 'handles JSON-RPC notification messages' do
+      notification = { method: 'test_notification', params: { foo: 'bar' } }
+      event_data = "event: message\ndata: #{notification.to_json}\n\n"
+
+      # Set up notification callback
+      notification_received = false
+      server.on_notification do |method, params|
+        notification_received = true
+        expect(method).to eq('test_notification')
+        expect(params).to eq({ 'foo' => 'bar' })
+      end
+
+      server.send(:parse_and_handle_sse_event, event_data)
+      expect(notification_received).to be true
+    end
+
+    it 'handles invalid JSON gracefully' do
+      event_data = "event: message\ndata: {invalid json}\n\n"
+
+      # Should log warning but not raise
+      expect(server.instance_variable_get(:@logger)).to receive(:warn)
+
+      expect do
+        server.send(:parse_and_handle_sse_event, event_data)
+      end.not_to raise_error
     end
   end
 end

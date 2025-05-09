@@ -4,6 +4,14 @@
       "url": "http://localhost:8931/sse",
       "headers": {},
       "comment": "Local Playwright MCP Server running on port 8931"
+    },
+    "filesystem": {
+      "command": "/opt/homebrew/bin/npx",
+      "args": [
+        "-y",
+        "@modelcontextprotocol/server-filesystem",
+        "."
+      ]
     }
   }
 }

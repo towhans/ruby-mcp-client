@@ -298,7 +298,7 @@ You can define MCP server configurations in JSON files for easier management:
 }
 ```
 
-A simpler example used in the Playwright demo (found in `examples/playwright_server_definition.json`):
+A simpler example used in the Playwright demo (found in `examples/sample_server_definition.json`):
 
 ```json
 {
