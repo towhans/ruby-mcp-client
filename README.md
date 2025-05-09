@@ -289,9 +289,7 @@ You can define MCP server configurations in JSON files for easier management:
       "url": "http://localhost:8931/sse",
       "headers": {
         "Authorization": "Bearer TOKEN"
-      },
-      "read_timeout": 30,
-      "ping": 10
+      }
     },
     "filesystem": {
       "type": "stdio",
