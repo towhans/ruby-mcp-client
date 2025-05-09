@@ -29,6 +29,10 @@ RSpec.describe MCPClient::ServerSSE do
       server = described_class.new(base_url: 'https://example.com/mcp/')
       expect(server.base_url).to eq('https://example.com/mcp')
     end
+
+    it 'initializes auth_error to nil' do
+      expect(server.instance_variable_get(:@auth_error)).to be_nil
+    end
   end
 
   describe '#connect' do
@@ -86,6 +90,31 @@ RSpec.describe MCPClient::ServerSSE do
       allow(Thread).to receive(:new).and_raise(StandardError.new('Connection failed'))
 
       expect { server.connect }.to raise_error(MCPClient::Errors::ConnectionError, /Failed to connect/)
+    end
+
+    it 'preserves authorization error messages' do
+      # Set an authorization error
+      server.instance_variable_set(:@auth_error, 'Authorization failed: Invalid token')
+
+      # Simulate a connection failure
+      allow(Thread).to receive(:new).and_raise(StandardError.new('Connection failed'))
+
+      # Should use the auth error message instead of the generic connection message
+      expect do
+        server.connect
+      end.to raise_error(MCPClient::Errors::ConnectionError, 'Authorization failed: Invalid token')
+    end
+
+    it 'preserves authorization errors from ConnectionError exceptions' do
+      # Simulate a connection failure with authorization error message
+      allow(Thread).to receive(:new).and_raise(
+        MCPClient::Errors::ConnectionError.new('Authorization failed: Unauthorized request')
+      )
+
+      # Should preserve the authorization error message
+      expect do
+        server.connect
+      end.to raise_error(MCPClient::Errors::ConnectionError, 'Authorization failed: Unauthorized request')
     end
 
     it 'times out if connection is not established' do
@@ -596,6 +625,33 @@ RSpec.describe MCPClient::ServerSSE do
 
       server.send(:process_sse_chunk, completion_chunk)
     end
+
+    it 'detects direct JSON-RPC error responses with authorization errors' do
+      # Authorization error in JSON-RPC format that isn't an SSE event
+      error_response = '{
+        "jsonrpc":"2.0",
+        "error":{"code":-32000,"message":"Unauthorized: Invalid token"},
+        "id":null
+      }'
+
+      # Should set auth_error and raise ConnectionError
+      expect do
+        server.send(:process_sse_chunk, error_response)
+      end.to raise_error(MCPClient::Errors::ConnectionError, /Authorization failed/)
+
+      # Check auth_error was set
+      expect(server.instance_variable_get(:@auth_error)).to match(/Authorization failed/)
+    end
+
+    it 'ignores invalid JSON' do
+      # Invalid JSON that looks like it might contain an error
+      invalid_json = '{ "error": {'
+
+      # Should not raise an error
+      expect do
+        server.send(:process_sse_chunk, invalid_json)
+      end.not_to raise_error
+    end
   end
 
   describe '#parse_and_handle_sse_event' do
@@ -646,6 +702,73 @@ RSpec.describe MCPClient::ServerSSE do
       expect do
         server.send(:parse_and_handle_sse_event, event_data)
       end.not_to raise_error
+    end
+
+    it 'detects and handles authorization errors in message events' do
+      # Create a JSON-RPC error response with authorization error
+      error_data = {
+        jsonrpc: '2.0',
+        error: {
+          code: -32_000,
+          message: 'Unauthorized: Invalid API token'
+        },
+        id: 1
+      }
+      event_data = "event: message\ndata: #{error_data.to_json}\n\n"
+
+      # Should set auth_error and raise ConnectionError
+      expect do
+        server.send(:parse_and_handle_sse_event, event_data)
+      end.to raise_error(MCPClient::Errors::ConnectionError, /Authorization failed/)
+
+      # Check auth_error was set
+      expect(server.instance_variable_get(:@auth_error)).to match(/Authorization failed/)
+      expect(server.instance_variable_get(:@connection_established)).to be false
+    end
+
+    it 'detects authorization errors with specific error codes' do
+      # Create a JSON-RPC error response with 401 error code
+      error_data = {
+        jsonrpc: '2.0',
+        error: {
+          code: 401,
+          message: 'Authentication required'
+        },
+        id: 1
+      }
+      event_data = "event: message\ndata: #{error_data.to_json}\n\n"
+
+      # Should set auth_error and raise ConnectionError
+      expect do
+        server.send(:parse_and_handle_sse_event, event_data)
+      end.to raise_error(MCPClient::Errors::ConnectionError, /Authorization failed/)
+
+      # Check auth_error was set
+      expect(server.instance_variable_get(:@auth_error)).to match(/Authorization failed: Authentication required/)
+    end
+
+    it 'handles regular error messages without raising ConnectionError' do
+      # Create a JSON-RPC error response with a normal error
+      error_data = {
+        jsonrpc: '2.0',
+        error: {
+          code: -32_603,
+          message: 'Internal server error'
+        },
+        id: 1
+      }
+      event_data = "event: message\ndata: #{error_data.to_json}\n\n"
+
+      # Should log the error but not raise ConnectionError
+      expect(server.instance_variable_get(:@logger)).to receive(:error).with(/Server error/)
+
+      # Should not raise an error
+      expect do
+        server.send(:parse_and_handle_sse_event, event_data)
+      end.not_to raise_error
+
+      # Should not set auth_error
+      expect(server.instance_variable_get(:@auth_error)).to be_nil
     end
   end
 end

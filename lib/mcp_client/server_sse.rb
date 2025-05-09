@@ -48,6 +48,7 @@ module MCPClient
       @connection_established = false
       @connection_cv = @mutex.new_cond
       @initialized = false
+      @auth_error = nil
       # Whether to use SSE transport; may disable if handshake fails
       @use_sse = true
     end
@@ -138,8 +139,21 @@ module MCPClient
         effective_timeout = [@read_timeout || 30, 30].min
         wait_for_connection(timeout: effective_timeout)
         true
+      rescue MCPClient::Errors::ConnectionError => e
+        cleanup
+        # Check for stored auth error first, as it's more specific
+        auth_error = @mutex.synchronize { @auth_error }
+        raise MCPClient::Errors::ConnectionError, auth_error if auth_error
+
+        raise MCPClient::Errors::ConnectionError, e.message if e.message.include?('Authorization failed')
+
+        raise MCPClient::Errors::ConnectionError, "Failed to connect to MCP server at #{@base_url}: #{e.message}"
       rescue StandardError => e
         cleanup
+        # Check for stored auth error
+        auth_error = @mutex.synchronize { @auth_error }
+        raise MCPClient::Errors::ConnectionError, auth_error if auth_error
+
         raise MCPClient::Errors::ConnectionError, "Failed to connect to MCP server at #{@base_url}: #{e.message}"
       end
     end
@@ -163,6 +177,7 @@ module MCPClient
         @tools = nil
         @connection_established = false
         @sse_connected = false
+        # Don't clear auth error as we need it for reporting the correct error
       end
     end
 
@@ -264,21 +279,55 @@ module MCPClient
       @capabilities = result['capabilities'] if result.key?('capabilities')
     end
 
+    # Set up the SSE connection
+    # @param uri [URI] The parsed base URL
+    # @return [Faraday::Connection] The configured Faraday connection
+    def setup_sse_connection(uri)
+      sse_base = "#{uri.scheme}://#{uri.host}:#{uri.port}"
+
+      @sse_conn ||= Faraday.new(url: sse_base) do |f|
+        f.options.open_timeout = 10
+        f.options.timeout = nil
+        f.request :retry, max: @max_retries, interval: @retry_backoff, backoff_factor: 2
+        f.adapter Faraday.default_adapter
+      end
+
+      # Use response handling with status check
+      @sse_conn.builder.use Faraday::Response::RaiseError
+      @sse_conn
+    end
+
+    # Handle authorization errors from Faraday
+    # @param error [Faraday::Error] The authorization error
+    # @raise [MCPClient::Errors::ConnectionError] with appropriate message
+    def handle_sse_auth_error(error)
+      error_message = "Authorization failed: HTTP #{error.response[:status]}"
+      @logger.error(error_message)
+
+      @mutex.synchronize do
+        @auth_error = error_message
+        @connection_established = false
+        @connection_cv.broadcast
+      end
+      raise MCPClient::Errors::ConnectionError, error_message
+    end
+
+    # Reset connection state and signal waiting threads
+    def reset_connection_state
+      @mutex.synchronize do
+        @connection_established = false
+        @connection_cv.broadcast
+      end
+    end
+
     # Start the SSE thread to listen for events
     def start_sse_thread
       return if @sse_thread&.alive?
 
       @sse_thread = Thread.new do
         uri = URI.parse(@base_url)
-        sse_base = "#{uri.scheme}://#{uri.host}:#{uri.port}"
         sse_path = uri.request_uri
-
-        @sse_conn ||= Faraday.new(url: sse_base) do |f|
-          f.options.open_timeout = 10
-          f.options.timeout = nil
-          f.request :retry, max: @max_retries, interval: @retry_backoff, backoff_factor: 2
-          f.adapter Faraday.default_adapter
-        end
+        conn = setup_sse_connection(uri)
 
         # Reset connection state
         @mutex.synchronize do
@@ -286,20 +335,29 @@ module MCPClient
           @connection_established = false
         end
 
-        @sse_conn.get(sse_path) do |req|
-          @headers.each { |k, v| req.headers[k] = v }
-          req.options.on_data = proc do |chunk, _bytes|
-            process_sse_chunk(chunk.dup) if chunk && !chunk.empty?
+        begin
+          conn.get(sse_path) do |req|
+            @headers.each { |k, v| req.headers[k] = v }
+
+            req.options.on_data = proc do |chunk, _bytes|
+              process_sse_chunk(chunk.dup) if chunk && !chunk.empty?
+            end
           end
+        rescue Faraday::UnauthorizedError, Faraday::ForbiddenError => e
+          handle_sse_auth_error(e)
+        rescue Faraday::Error => e
+          @logger.error("Failed SSE connection: #{e.message}")
+          raise
         end
+      rescue MCPClient::Errors::ConnectionError => e
+        # Re-raise connection errors to propagate them
+        # Signal connect method to stop waiting
+        reset_connection_state
+        raise e
       rescue StandardError => e
         @logger.error("SSE connection error: #{e.message}")
-
         # Signal connect method to avoid deadlock
-        @mutex.synchronize do
-          @connection_established = false
-          @connection_cv.broadcast
-        end
+        reset_connection_state
       ensure
         @mutex.synchronize { @sse_connected = false }
       end
@@ -309,6 +367,28 @@ module MCPClient
     # @param chunk [String] the chunk to process
     def process_sse_chunk(chunk)
       @logger.debug("Processing SSE chunk: #{chunk.inspect}")
+
+      # Check for direct JSON error responses (which aren't proper SSE events)
+      if chunk.start_with?('{') && chunk.include?('"error"') &&
+         (chunk.include?('Unauthorized') || chunk.include?('authentication'))
+        begin
+          data = JSON.parse(chunk)
+          if data['error']
+            error_message = data['error']['message'] || 'Unknown server error'
+
+            @mutex.synchronize do
+              @auth_error = "Authorization failed: #{error_message}"
+
+              @connection_established = false
+              @connection_cv.broadcast
+            end
+
+            raise MCPClient::Errors::ConnectionError, "Authorization failed: #{error_message}"
+          end
+        rescue JSON::ParserError
+          # Not valid JSON, process normally
+        end
+      end
 
       event_buffers = nil
       @mutex.synchronize do
@@ -326,6 +406,89 @@ module MCPClient
       event_buffers&.each { |event_data| parse_and_handle_sse_event(event_data) }
     end
 
+    # Handle SSE endpoint event
+    # @param data [String] The endpoint path
+    def handle_endpoint_event(data)
+      @mutex.synchronize do
+        @rpc_endpoint = data
+        @sse_connected = true
+        @connection_established = true
+        @connection_cv.broadcast
+      end
+    end
+
+    # Check if the error represents an authorization error
+    # @param error_message [String] The error message from the server
+    # @param error_code [Integer, nil] The error code if available
+    # @return [Boolean] True if it's an authorization error
+    def authorization_error?(error_message, error_code)
+      return true if error_message.include?('Unauthorized') || error_message.include?('authentication')
+      return true if [401, -32_000].include?(error_code)
+
+      false
+    end
+
+    # Handle authorization error in SSE message
+    # @param error_message [String] The error message from the server
+    def handle_sse_auth_error_message(error_message)
+      @mutex.synchronize do
+        @auth_error = "Authorization failed: #{error_message}"
+        @connection_established = false
+        @connection_cv.broadcast
+      end
+
+      raise MCPClient::Errors::ConnectionError, "Authorization failed: #{error_message}"
+    end
+
+    # Process error messages in SSE responses
+    # @param data [Hash] The parsed SSE message data
+    def process_error_in_message(data)
+      return unless data['error']
+
+      error_message = data['error']['message'] || 'Unknown server error'
+      error_code = data['error']['code']
+
+      # Handle unauthorized errors (close connection immediately)
+      handle_sse_auth_error_message(error_message) if authorization_error?(error_message, error_code)
+
+      @logger.error("Server error: #{error_message}")
+      true # Error was processed
+    end
+
+    # Process JSON-RPC notifications
+    # @param data [Hash] The parsed SSE message data
+    # @return [Boolean] True if a notification was processed
+    def process_notification(data)
+      return false unless data['method'] && !data.key?('id')
+
+      @notification_callback&.call(data['method'], data['params'])
+      true
+    end
+
+    # Process JSON-RPC responses
+    # @param data [Hash] The parsed SSE message data
+    # @return [Boolean] True if a response was processed
+    def process_response(data)
+      return false unless data['id']
+
+      @mutex.synchronize do
+        # Store tools data if present
+        @tools_data = data['result']['tools'] if data['result'] && data['result']['tools']
+
+        # Store response for the waiting request
+        if data['error']
+          @sse_results[data['id']] = {
+            'isError' => true,
+            'content' => [{ 'type' => 'text', 'text' => data['error'].to_json }]
+          }
+        elsif data['result']
+          @sse_results[data['id']] = data['result']
+        end
+      end
+
+      true
+    end
+
     # Parse and handle an SSE event
     # @param event_data [String] the event data to parse
     def parse_and_handle_sse_event(event_data)
@@ -334,47 +497,35 @@ module MCPClient
 
       case event[:event]
       when 'endpoint'
-        ep = event[:data]
-        @mutex.synchronize do
-          @rpc_endpoint = ep
-          @sse_connected = true
-          @connection_established = true
-          @connection_cv.broadcast
-        end
+        handle_endpoint_event(event[:data])
       when 'ping'
         # Received ping event, no action needed
       when 'message'
-        return if event[:data].empty?
+        handle_message_event(event)
+      end
+    end
 
-        begin
-          data = JSON.parse(event[:data])
+    # Handle a message event from SSE
+    # @param event [Hash] The parsed SSE event
+    def handle_message_event(event)
+      return if event[:data].empty?
 
-          # Handle JSON-RPC notifications (no id, has method)
-          if data['method'] && !data.key?('id')
-            @notification_callback&.call(data['method'], data['params'])
-            return
-          end
+      begin
+        data = JSON.parse(event[:data])
 
-          # Handle JSON-RPC responses
-          if data['id']
-            @mutex.synchronize do
-              # Store tools data if present
-              @tools_data = data['result']['tools'] if data['result'] && data['result']['tools']
+        # Process the message in order of precedence
+        return if process_error_in_message(data)
 
-              # Store response for the waiting request
-              if data['error']
-                @sse_results[data['id']] = {
-                  'isError' => true,
-                  'content' => [{ 'type' => 'text', 'text' => data['error'].to_json }]
-                }
-              elsif data['result']
-                @sse_results[data['id']] = data['result']
-              end
-            end
-          end
-        rescue JSON::ParserError => e
-          @logger.warn("Failed to parse JSON from event data: #{e.message}")
-        end
+        return if process_notification(data)
+
+        process_response(data)
+      rescue MCPClient::Errors::ConnectionError
+        # Re-raise connection errors to propagate to the calling code
+        raise
+      rescue JSON::ParserError => e
+        @logger.warn("Failed to parse JSON from event data: #{e.message}")
+      rescue StandardError => e
+        @logger.error("Error processing SSE event: #{e.message}")
       end
     end
 
