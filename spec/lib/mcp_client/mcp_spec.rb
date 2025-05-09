@@ -23,21 +23,23 @@ RSpec.describe MCPClient do
       url = 'https://example.com/'
       headers = { 'Authorization' => 'Bearer token' }
       cfg = MCPClient.sse_config(base_url: url, headers: headers)
-      expect(cfg).to eq(type: 'sse', base_url: url, headers: headers, read_timeout: 30, ping: 10, close_after: 25, retries: 0, retry_backoff: 1)
+      expect(cfg).to eq(type: 'sse', base_url: url, headers: headers, read_timeout: 30, ping: 10, retries: 0,
+                        retry_backoff: 1)
     end
 
     it 'builds an sse server config hash with custom parameters' do
       url = 'https://example.com/'
       headers = { 'Authorization' => 'Bearer token' }
-      cfg = MCPClient.sse_config(base_url: url, headers: headers, read_timeout: 60, ping: 15, close_after: 30, retries: 3, retry_backoff: 2)
-      expect(cfg).to eq(type: 'sse', base_url: url, headers: headers, read_timeout: 60, ping: 15, close_after: 30, retries: 3, retry_backoff: 2)
+      cfg = MCPClient.sse_config(base_url: url, headers: headers, read_timeout: 60, ping: 15, retries: 3,
+                                 retry_backoff: 2)
+      expect(cfg).to eq(type: 'sse', base_url: url, headers: headers, read_timeout: 60, ping: 15, retries: 3,
+                        retry_backoff: 2)
     end
 
-    it 'allows overriding the default ping and close_after values' do
+    it 'allows overriding the default ping value' do
       url = 'https://example.com/'
-      cfg = MCPClient.sse_config(base_url: url, ping: 5, close_after: 15)
+      cfg = MCPClient.sse_config(base_url: url, ping: 5)
       expect(cfg[:ping]).to eq(5)
-      expect(cfg[:close_after]).to eq(15)
     end
   end
 end

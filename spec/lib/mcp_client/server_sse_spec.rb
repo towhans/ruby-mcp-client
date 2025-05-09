@@ -47,9 +47,10 @@ RSpec.describe MCPClient::ServerSSE do
       expect(custom_server.instance_variable_get(:@ping_interval)).to eq(30)
     end
 
-    it 'accepts custom close_after value' do
-      custom_server = described_class.new(base_url: base_url, close_after: 60)
-      expect(custom_server.instance_variable_get(:@close_after)).to eq(60)
+    it 'calculates close_after based on ping value' do
+      custom_server = described_class.new(base_url: base_url, ping: 20)
+      expected_close_after = (20 * MCPClient::ServerSSE::CLOSE_AFTER_PING_RATIO).to_i
+      expect(custom_server.instance_variable_get(:@close_after)).to eq(expected_close_after)
     end
   end
 
@@ -471,6 +472,15 @@ RSpec.describe MCPClient::ServerSSE do
       last_activity_time = server.instance_variable_get(:@last_activity_time)
       expect(last_activity_time).to be >= before_time
     end
+
+    it 'calculates close_after based on ping interval' do
+      # Create a server with custom ping value
+      custom_server = described_class.new(base_url: 'https://example.com', ping: 15)
+      # The close_after should be calculated as ping * CLOSE_AFTER_PING_RATIO
+      expected_close_after = (15 * MCPClient::ServerSSE::CLOSE_AFTER_PING_RATIO).to_i
+
+      expect(custom_server.instance_variable_get(:@close_after)).to eq(expected_close_after)
+    end
   end
 
   describe '#record_activity' do
@@ -483,6 +493,80 @@ RSpec.describe MCPClient::ServerSSE do
       # The last_activity_time should be set to a time >= the before_time
       last_activity_time = server.instance_variable_get(:@last_activity_time)
       expect(last_activity_time).to be >= before_time
+    end
+  end
+
+  describe 'activity monitoring' do
+    it 'calculates close_after as a multiple of ping interval' do
+      ping_value = 15
+      server = described_class.new(base_url: 'https://example.com', ping: ping_value)
+
+      expected_close_after = (ping_value * MCPClient::ServerSSE::CLOSE_AFTER_PING_RATIO).to_i
+      actual_close_after = server.instance_variable_get(:@close_after)
+
+      expect(actual_close_after).to eq(expected_close_after)
+    end
+
+    it 'initializes last_activity_time on startup' do
+      before_time = Time.now
+      server = described_class.new(base_url: 'https://example.com')
+
+      # The last_activity_time should be initialized during construction
+      last_activity_time = server.instance_variable_get(:@last_activity_time)
+      expect(last_activity_time).to be >= before_time
+    end
+
+    it 'tracks activity when receiving SSE chunks' do
+      server = described_class.new(base_url: 'https://example.com')
+
+      # Set last_activity_time to the past
+      old_time = Time.now - 10
+      server.instance_variable_set(:@last_activity_time, old_time)
+
+      # Process a message event
+      event_chunk = "event: message\ndata: {\"jsonrpc\":\"2.0\",\"id\":1,\"result\":{}}\n\n"
+      server.send(:process_sse_chunk, event_chunk)
+
+      # Verify the last_activity_time was updated
+      last_activity_time = server.instance_variable_get(:@last_activity_time)
+      expect(last_activity_time).to be > old_time
+    end
+
+    it 'tracks activity when sending JSON-RPC requests' do
+      # Setup the server with mocked HTTP responses
+      server = described_class.new(base_url: 'https://example.com')
+
+      # Disable SSE for this test
+      server.instance_variable_set(:@use_sse, false)
+      server.instance_variable_set(:@rpc_endpoint, '/rpc')
+      server.instance_variable_set(:@connection_established, true)
+
+      # Create a Faraday connection stub
+      faraday_stubs = Faraday::Adapter::Test::Stubs.new
+      faraday_conn = Faraday.new do |builder|
+        builder.adapter :test, faraday_stubs
+      end
+
+      # Stub the Faraday response
+      faraday_stubs.post('/rpc') do |_env|
+        [200, { 'Content-Type' => 'application/json' }, '{"result": {}}']
+      end
+
+      # Set the stubbed connection
+      server.instance_variable_set(:@rpc_conn, faraday_conn)
+
+      # Set last_activity_time to the past
+      old_time = Time.now - 10
+      server.instance_variable_set(:@last_activity_time, old_time)
+      server.instance_variable_set(:@initialized, true)
+
+      # Send a request
+      request = { jsonrpc: '2.0', id: 1, method: 'test', params: {} }
+      server.send(:send_jsonrpc_request, request)
+
+      # Verify the last_activity_time was updated
+      last_activity_time = server.instance_variable_get(:@last_activity_time)
+      expect(last_activity_time).to be > old_time
     end
   end
 
@@ -865,7 +949,8 @@ RSpec.describe MCPClient::ServerSSE do
 
       # Mock the Faraday connection and response
       mock_conn = instance_double(Faraday::Connection)
-      allow(mock_conn).to receive(:post).and_return(double('response', success?: true, body: '{"result": {}}', status: 200))
+      allow(mock_conn).to receive(:post).and_return(double('response', success?: true, body: '{"result": {}}',
+                                                                       status: 200))
       allow(Faraday).to receive(:new).and_return(mock_conn)
 
       # Set up a fake RPC endpoint
@@ -876,7 +961,7 @@ RSpec.describe MCPClient::ServerSSE do
       expect(server).to receive(:record_activity).exactly(2).times
 
       # Allow JSON parsing
-      allow(JSON).to receive(:parse).and_return({'result' => {}})
+      allow(JSON).to receive(:parse).and_return({ 'result' => {} })
 
       server.send(:send_jsonrpc_request, request)
     end

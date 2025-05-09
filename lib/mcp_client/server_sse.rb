@@ -11,17 +11,19 @@ module MCPClient
   # Implementation of MCP server that communicates via Server-Sent Events (SSE)
   # Useful for communicating with remote MCP servers over HTTP
   class ServerSSE < ServerBase
+    # Ratio of close_after timeout to ping interval
+    CLOSE_AFTER_PING_RATIO = 2.5
+
     attr_reader :base_url, :tools, :server_info, :capabilities
 
     # @param base_url [String] The base URL of the MCP server
     # @param headers [Hash] Additional headers to include in requests
     # @param read_timeout [Integer] Read timeout in seconds (default: 30)
     # @param ping [Integer] Time in seconds after which to send ping if no activity (default: 10)
-    # @param close_after [Integer] Time in seconds of inactivity after which to close connection (default: 25)
     # @param retries [Integer] number of retry attempts on transient errors
     # @param retry_backoff [Numeric] base delay in seconds for exponential backoff
     # @param logger [Logger, nil] optional logger
-    def initialize(base_url:, headers: {}, read_timeout: 30, ping: 10, close_after: 25,
+    def initialize(base_url:, headers: {}, read_timeout: 30, ping: 10,
                    retries: 0, retry_backoff: 1, logger: nil)
       super()
       @logger = logger || Logger.new($stdout, level: Logger::WARN)
@@ -40,7 +42,8 @@ module MCPClient
       @tools = nil
       @read_timeout = read_timeout
       @ping_interval = ping
-      @close_after = close_after
+      # Set close_after to a multiple of the ping interval
+      @close_after = (ping * CLOSE_AFTER_PING_RATIO).to_i
 
       # SSE-provided JSON-RPC endpoint path for POST requests
       @rpc_endpoint = nil
@@ -433,14 +436,8 @@ module MCPClient
     def process_sse_chunk(chunk)
       @logger.debug("Processing SSE chunk: #{chunk.inspect}")
 
-      # Only record activity for real events, not for SSE comments (keep-alive messages)
-      # Keep-alive messages are typically in the format ": keep-alive N\n\n"
-      if chunk.strip.start_with?(':') && chunk.include?('keep-alive') && !chunk.include?('event:')
-        @logger.debug("Ignoring keep-alive message for activity tracking")
-      else
-        # Record activity for actual data messages
-        record_activity
-      end
+      # Only record activity for real events
+      record_activity if chunk.include?('event:')
 
       # Check for direct JSON error responses (which aren't proper SSE events)
       if chunk.start_with?('{') && chunk.include?('"error"') &&
