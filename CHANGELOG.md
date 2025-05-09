@@ -1,5 +1,11 @@
 # Changelog
 
+## 0.5.2 (2025-05-09)
+
+- Improved authentication error handling in SSE connections
+- Better error messages for authentication failures
+- Code refactoring to improve maintainability and reduce complexity
+
 ## 0.5.1 (2025-04-26)
 
 - Support for server definition files in JSON format
