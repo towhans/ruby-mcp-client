@@ -92,5 +92,43 @@ RSpec.describe MCPClient::Tool do
         }
       )
     end
+
+    context 'with $schema in the schema' do
+      let(:schema_with_dollar_schema) do
+        {
+          '$schema' => 'http://json-schema.org/draft-07/schema#',
+          'type' => 'object',
+          'properties' => {
+            'param1' => { 'type' => 'string', '$schema' => 'http://example.com' },
+            'param2' => { 'type' => 'number' }
+          },
+          'required' => ['param1']
+        }
+      end
+
+      let(:expected_cleaned_schema) do
+        {
+          'type' => 'object',
+          'properties' => {
+            'param1' => { 'type' => 'string' },
+            'param2' => { 'type' => 'number' }
+          },
+          'required' => ['param1']
+        }
+      end
+
+      let(:tool_with_schema) do
+        described_class.new(
+          name: tool_name,
+          description: tool_description,
+          schema: schema_with_dollar_schema
+        )
+      end
+
+      it 'removes $schema keys from the schema' do
+        google_tool = tool_with_schema.to_google_tool
+        expect(google_tool[:parameters]).to eq(expected_cleaned_schema)
+      end
+    end
   end
 end

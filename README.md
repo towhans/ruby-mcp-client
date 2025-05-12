@@ -36,7 +36,7 @@ with popular AI services with built-in conversions:
 
 - `to_openai_tools()` - Formats tools for OpenAI API
 - `to_anthropic_tools()` - Formats tools for Anthropic Claude API
-- `to_google_tools()` - Formats tools for Google API
+- `to_google_tools()` - Formats tools for Google Vertex AI API (automatically removes "$schema" keys not accepted by Vertex AI)
 
 ## Usage
 
@@ -101,6 +101,7 @@ end
 # Format tools for specific AI services
 openai_tools = client.to_openai_tools
 anthropic_tools = client.to_anthropic_tools
+google_tools = client.to_google_tools
 
 # Register for server notifications
 client.on_notification do |server, method, params|
@@ -268,6 +269,7 @@ Complete examples can be found in the `examples/` directory:
 - `ruby_openai_mcp.rb` - Integration with alexrudall/ruby-openai gem
 - `openai_ruby_mcp.rb` - Integration with official openai/openai-ruby gem
 - `ruby_anthropic_mcp.rb` - Integration with alexrudall/ruby-anthropic gem
+- `gemini_ai_mcp.rb` - Integration with Google Vertex AI and Gemini models
 - `mcp_sse_server_example.rb` - SSE transport with Playwright MCP
 
 ## MCP Server Compatibility

@@ -10,6 +10,8 @@
 /test/version_tmp/
 /tmp/
 .idea
+examples/google-credentials.json
+.tool-versions
 
 # Used by dotenv library to load environment variables.
 # .env

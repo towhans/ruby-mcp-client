@@ -51,8 +51,28 @@ module MCPClient
       {
         name: @name,
         description: @description,
-        parameters: @schema
+        parameters: cleaned_schema(@schema)
       }
+    end
+
+    private
+
+    # Recursively remove "$schema" keys that are not accepted by Vertex AI
+    # @param obj [Object] schema element (Hash/Array/other)
+    # @return [Object] cleaned schema without "$schema" keys
+    def cleaned_schema(obj)
+      case obj
+      when Hash
+        obj.each_with_object({}) do |(k, v), h|
+          next if k == '$schema'
+
+          h[k] = cleaned_schema(v)
+        end
+      when Array
+        obj.map { |v| cleaned_schema(v) }
+      else
+        obj
+      end
     end
   end
 end
