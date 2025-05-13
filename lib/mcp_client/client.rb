@@ -42,15 +42,35 @@ module MCPClient
     # Lists all available tools from all connected MCP servers
     # @param cache [Boolean] whether to use cached tools or fetch fresh
     # @return [Array<MCPClient::Tool>] list of available tools
+    # @raise [MCPClient::Errors::ConnectionError] on authorization failures
+    # @raise [MCPClient::Errors::ToolCallError] if no tools could be retrieved from any server
     def list_tools(cache: true)
       return @tool_cache.values if cache && !@tool_cache.empty?
 
       tools = []
+      connection_errors = []
+
       servers.each do |server|
         server.list_tools.each do |tool|
           @tool_cache[tool.name] = tool
           tools << tool
         end
+      rescue MCPClient::Errors::ConnectionError => e
+        # Fast-fail on authorization errors for better user experience
+        # If this is the first server or we haven't collected any tools yet,
+        # raise the auth error directly to avoid cascading error messages
+        raise e if e.message.include?('Authorization failed') && tools.empty?
+
+        # Store the error and try other servers
+        connection_errors << e
+        @logger.error("Server error: #{e.message}")
+      end
+
+      # If we didn't get any tools from any server but have servers configured, report failure
+      if tools.empty? && !servers.empty?
+        raise connection_errors.first if connection_errors.any?
+
+        raise MCPClient::Errors::ToolCallError, 'Failed to retrieve tools from any server'
       end
 
       tools

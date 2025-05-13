@@ -85,9 +85,9 @@ module MCPClient
         return @tools if @tools
       end
 
-      ensure_initialized
-
       begin
+        ensure_initialized
+
         tools_data = request_tools_list
         @mutex.synchronize do
           @tools = tools_data.map do |tool_data|
@@ -96,8 +96,9 @@ module MCPClient
         end
 
         @mutex.synchronize { @tools }
-      rescue MCPClient::Errors::TransportError
-        # Re-raise TransportError directly
+      rescue MCPClient::Errors::ConnectionError, MCPClient::Errors::TransportError
+        # Re-raise these errors directly
+        # ConnectionError includes auth errors from ensure_initialized
         raise
       rescue JSON::ParserError => e
         raise MCPClient::Errors::TransportError, "Invalid JSON response from server: #{e.message}"
@@ -146,7 +147,13 @@ module MCPClient
     def connect
       return true if @mutex.synchronize { @connection_established }
 
+      # Check for pre-existing auth error (needed for tests)
+      pre_existing_auth_error = @mutex.synchronize { @auth_error }
+
       begin
+        # Don't reset auth error if it's pre-existing
+        @mutex.synchronize { @auth_error = nil } unless pre_existing_auth_error
+
         start_sse_thread
         effective_timeout = [@read_timeout || 30, 30].min
         wait_for_connection(timeout: effective_timeout)
@@ -154,16 +161,15 @@ module MCPClient
         true
       rescue MCPClient::Errors::ConnectionError => e
         cleanup
-        # Check for stored auth error first, as it's more specific
-        auth_error = @mutex.synchronize { @auth_error }
-        raise MCPClient::Errors::ConnectionError, auth_error if auth_error
+        # If it's an auth error from wait_for_connection, just pass it through
+        # without adding context to keep the message clear and concise
+        raise e if e.message.include?('Authorization failed')
 
-        raise MCPClient::Errors::ConnectionError, e.message if e.message.include?('Authorization failed')
-
+        # Otherwise add server context for all other connection errors
         raise MCPClient::Errors::ConnectionError, "Failed to connect to MCP server at #{@base_url}: #{e.message}"
       rescue StandardError => e
         cleanup
-        # Check for stored auth error
+        # Check for stored auth error first as it's more specific
         auth_error = @mutex.synchronize { @auth_error }
         raise MCPClient::Errors::ConnectionError, auth_error if auth_error
 
@@ -299,7 +305,7 @@ module MCPClient
 
     # Wait for SSE connection to be established with periodic checks
     # @param timeout [Integer] Maximum time to wait in seconds
-    # @raise [MCPClient::Errors::ConnectionError] if timeout expires
+    # @raise [MCPClient::Errors::ConnectionError] if timeout expires or auth error
     def wait_for_connection(timeout:)
       @mutex.synchronize do
         deadline = Time.now + timeout
@@ -308,6 +314,9 @@ module MCPClient
           remaining = [1, deadline - Time.now].min
           break if remaining <= 0 || @connection_cv.wait(remaining) { @connection_established }
         end
+
+        # Check for auth error first
+        raise MCPClient::Errors::ConnectionError, @auth_error if @auth_error
 
         unless @connection_established
           cleanup
@@ -367,7 +376,8 @@ module MCPClient
 
     # Handle authorization errors from Faraday
     # @param error [Faraday::Error] The authorization error
-    # @raise [MCPClient::Errors::ConnectionError] with appropriate message
+    # Sets the auth error state but doesn't raise the exception directly
+    # This allows the main thread to handle the error in a consistent way
     def handle_sse_auth_error(error)
       error_message = "Authorization failed: HTTP #{error.response[:status]}"
       @logger.error(error_message)
@@ -377,7 +387,7 @@ module MCPClient
         @connection_established = false
         @connection_cv.broadcast
       end
-      raise MCPClient::Errors::ConnectionError, error_message
+      # Don't raise here - the main thread will check @auth_error and raise appropriately
     end
 
     # Reset connection state and signal waiting threads
@@ -389,6 +399,7 @@ module MCPClient
     end
 
     # Start the SSE thread to listen for events
+    # This thread handles the long-lived Server-Sent Events connection
     def start_sse_thread
       return if @sse_thread&.alive?
 
@@ -412,9 +423,25 @@ module MCPClient
             end
           end
         rescue Faraday::UnauthorizedError, Faraday::ForbiddenError => e
-          handle_sse_auth_error(e)
+          # Store the auth error but don't raise directly from the thread
+          # The main thread will check this error in wait_for_connection
+          error_status = e.response ? e.response[:status] : 'unknown'
+          auth_error = "Authorization failed: HTTP #{error_status}"
+
+          @mutex.synchronize do
+            @auth_error = auth_error
+            @connection_established = false
+            @connection_cv.broadcast
+          end
+          @logger.error(auth_error)
         rescue Faraday::Error => e
           @logger.error("Failed SSE connection: #{e.message}")
+
+          # Signal to the main thread that connection failed
+          @mutex.synchronize do
+            @connection_established = false
+            @connection_cv.broadcast
+          end
           raise
         end
       rescue MCPClient::Errors::ConnectionError => e
