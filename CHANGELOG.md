@@ -1,5 +1,13 @@
 # Changelog
 
+## 0.5.3 (2025-05-13)
+
+- Added `to_google_tools` method for Google Vertex AI API integration (by @IMhide)
+- Added Google Vertex Gemini example with full integration demonstration
+- Enhanced SSE connection management with automatic ping and inactivity tracking
+- Improved connection reliability with automatic reconnection on idle connections
+- Expanded README.md with updated documentation for SSE features
+
 ## 0.5.2 (2025-05-09)
 
 - Improved authentication error handling in SSE connections
