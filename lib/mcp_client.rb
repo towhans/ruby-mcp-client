@@ -19,8 +19,9 @@ module MCPClient
   # @param mcp_server_configs [Array<Hash>] configurations for MCP servers
   # @param server_definition_file [String, nil] optional path to a JSON file defining server configurations
   #   The JSON may be a single server object or an array of server objects.
+  # @param logger [Logger, nil] optional logger for client operations
   # @return [MCPClient::Client] new client instance
-  def self.create_client(mcp_server_configs: [], server_definition_file: nil)
+  def self.create_client(mcp_server_configs: [], server_definition_file: nil, logger: nil)
     require 'json'
     # Start with any explicit configs provided
     configs = Array(mcp_server_configs)
@@ -41,7 +42,7 @@ module MCPClient
         end
       end
     end
-    MCPClient::Client.new(mcp_server_configs: configs)
+    MCPClient::Client.new(mcp_server_configs: configs, logger: logger)
   end
 
   # Create a standard server configuration for stdio

@@ -11,6 +11,12 @@ RSpec.describe MCPClient do
       expect(client).to be_a(MCPClient::Client)
     end
 
+    it 'accepts a custom logger' do
+      custom_logger = Logger.new(StringIO.new)
+      client = MCPClient.create_client(mcp_server_configs: [], logger: custom_logger)
+      expect(client.logger).to eq(custom_logger)
+    end
+
     context 'with server_definition_file' do
       it 'loads a single server config from JSON file' do
         file = Tempfile.new('server.json')
