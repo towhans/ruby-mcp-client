@@ -1,6 +1,7 @@
 # frozen_string_literal: true
 
 require 'spec_helper'
+require 'timeout'
 
 RSpec.describe MCPClient::ServerSSE do
   let(:base_url) { 'https://example.com/mcp' }
@@ -379,6 +380,7 @@ RSpec.describe MCPClient::ServerSSE do
       server.instance_variable_set(:@connection_established, true)
       server.instance_variable_set(:@sse_connected, true)
       server.instance_variable_set(:@tools, [double('tool')])
+      server.instance_variable_set(:@initialized, true)
 
       # Expect both threads to be killed
       expect(sse_thread).to receive(:kill)
@@ -392,6 +394,60 @@ RSpec.describe MCPClient::ServerSSE do
       expect(server.instance_variable_get(:@connection_established)).to be false
       expect(server.instance_variable_get(:@sse_connected)).to be false
       expect(server.instance_variable_get(:@tools)).to be_nil
+      expect(server.instance_variable_get(:@initialized)).to be false
+    end
+
+    it 'sets flags before closing threads' do
+      # Create mock threads
+      sse_thread = double('sse_thread')
+      activity_thread = double('activity_thread')
+
+      # Set up the server with mocks
+      server.instance_variable_set(:@sse_thread, sse_thread)
+      server.instance_variable_set(:@activity_timer_thread, activity_thread)
+      server.instance_variable_set(:@connection_established, true)
+      server.instance_variable_set(:@sse_connected, true)
+      server.instance_variable_set(:@initialized, true)
+
+      # Allow thread kill operations
+      allow(sse_thread).to receive(:kill)
+      allow(activity_thread).to receive(:kill)
+
+      # Call cleanup
+      server.send(:cleanup)
+
+      # Verify connections were closed and flags were reset
+      expect(server.instance_variable_get(:@connection_established)).to be false
+      expect(server.instance_variable_get(:@sse_connected)).to be false
+      expect(server.instance_variable_get(:@initialized)).to be false
+      expect(server.instance_variable_get(:@sse_thread)).to be_nil
+      expect(server.instance_variable_get(:@activity_timer_thread)).to be_nil
+    end
+
+    it 'closes Faraday connections' do
+      # Set up initial state with connections
+      server.instance_variable_set(:@rpc_conn, double('rpc_conn'))
+      server.instance_variable_set(:@sse_conn, double('sse_conn'))
+
+      # Call cleanup
+      server.cleanup
+
+      # Verify connections were closed
+      expect(server.instance_variable_get(:@rpc_conn)).to be_nil
+      expect(server.instance_variable_get(:@sse_conn)).to be_nil
+    end
+
+    it 'preserves ping failure and reconnection metrics' do
+      # Set up initial state
+      server.instance_variable_set(:@consecutive_ping_failures, 2)
+      server.instance_variable_set(:@reconnect_attempts, 1)
+
+      # Call cleanup
+      server.cleanup
+
+      # Verify these values are preserved
+      expect(server.instance_variable_get(:@consecutive_ping_failures)).to eq(2)
+      expect(server.instance_variable_get(:@reconnect_attempts)).to eq(1)
     end
   end
 
@@ -473,6 +529,17 @@ RSpec.describe MCPClient::ServerSSE do
       expect(last_activity_time).to be >= before_time
     end
 
+    it 'initializes ping failure counters' do
+      allow(Thread).to receive(:new).and_return(double('thread', alive?: true))
+
+      server.send(:start_activity_monitor)
+
+      expect(server.instance_variable_get(:@consecutive_ping_failures)).to eq(0)
+      expect(server.instance_variable_get(:@max_ping_failures)).to eq(3)
+      expect(server.instance_variable_get(:@reconnect_attempts)).to eq(0)
+      expect(server.instance_variable_get(:@max_reconnect_attempts)).to eq(5)
+    end
+
     it 'calculates close_after based on ping interval' do
       # Create a server with custom ping value
       custom_server = described_class.new(base_url: 'https://example.com', ping: 15)
@@ -480,6 +547,76 @@ RSpec.describe MCPClient::ServerSSE do
       expected_close_after = (15 * MCPClient::ServerSSE::CLOSE_AFTER_PING_RATIO).to_i
 
       expect(custom_server.instance_variable_get(:@close_after)).to eq(expected_close_after)
+    end
+
+    context 'when ping fails' do
+      let(:server) { described_class.new(base_url: base_url, headers: headers, ping: 1) }
+
+      before do
+        # Mock the activity monitor to prevent thread creation
+        allow(server).to receive(:activity_monitor_loop)
+
+        # Setup connection state
+        server.instance_variable_set(:@connection_established, true)
+        server.instance_variable_set(:@sse_connected, true)
+        server.instance_variable_set(:@consecutive_ping_failures, 0)
+
+        # Force a ping failure
+        allow(server).to receive(:ping).and_raise(MCPClient::Errors::ToolCallError, 'Timeout waiting for SSE result')
+      end
+
+      it 'tracks consecutive ping failures' do
+        # We need to skip start_activity_monitor and directly call attempt_ping
+        # to test the failure tracking
+        server.send(:attempt_ping)
+
+        # Check that it incremented the failure counter
+        expect(server.instance_variable_get(:@consecutive_ping_failures)).to eq(1)
+      end
+    end
+  end
+
+  describe 'automatic reconnection' do
+    let(:server) { described_class.new(base_url: base_url, headers: headers, ping: 1) }
+
+    it 'attempts to reconnect after ping failures' do
+      # Setup the server
+      server.instance_variable_set(:@consecutive_ping_failures, 3)
+      server.instance_variable_set(:@reconnect_attempts, 0)
+      server.instance_variable_set(:@connection_established, true)
+      server.instance_variable_set(:@initialized, true)
+      server.instance_variable_set(:@max_ping_failures, 3)
+      server.instance_variable_set(:@max_reconnect_attempts, 5)
+
+      # Mock the cleanup and connect methods
+      allow(server).to receive(:cleanup)
+      allow(server).to receive(:connect).and_return(true)
+      allow(server).to receive(:sleep) # Don't actually sleep
+
+      # Directly run the reconnection method
+      server.send(:attempt_reconnection)
+
+      # It should have incremented the reconnection attempts
+      expect(server.instance_variable_get(:@reconnect_attempts)).to eq(1)
+    end
+
+    it 'resets ping failure counter after successful reconnection' do
+      # Setup the server
+      server.instance_variable_set(:@consecutive_ping_failures, 3)
+      server.instance_variable_set(:@reconnect_attempts, 0)
+      server.instance_variable_set(:@max_ping_failures, 3)
+      server.instance_variable_set(:@max_reconnect_attempts, 5)
+
+      # Mock the cleanup and connect methods
+      allow(server).to receive(:cleanup)
+      allow(server).to receive(:connect).and_return(true)
+      allow(server).to receive(:sleep) # Don't actually sleep
+
+      # Directly run the reconnection method
+      server.send(:attempt_reconnection)
+
+      # It should have reset the failure counter
+      expect(server.instance_variable_get(:@consecutive_ping_failures)).to eq(0)
     end
   end
 
@@ -497,6 +634,80 @@ RSpec.describe MCPClient::ServerSSE do
   end
 
   describe 'activity monitoring' do
+    context 'activity_monitor_loop' do
+      let(:server) { described_class.new(base_url: base_url, headers: headers, ping: 1) }
+
+      before do
+        allow(server).to receive(:ping).and_return(true)
+        allow(server).to receive(:attempt_ping).and_call_original
+        allow(server).to receive(:cleanup).and_call_original
+
+        # Initialize required instance variables
+        server.instance_variable_set(:@connection_established, true)
+        server.instance_variable_set(:@sse_connected, true)
+        server.instance_variable_set(:@last_activity_time, Time.now)
+        server.instance_variable_set(:@consecutive_ping_failures, 0)
+        server.instance_variable_set(:@reconnect_attempts, 0)
+        server.instance_variable_set(:@max_ping_failures, 3)
+        server.instance_variable_set(:@max_reconnect_attempts, 5)
+      end
+
+      it 'sends pings when idle' do
+        # Expect attempt_ping to be called, which will then call ping
+        expect(server).to receive(:attempt_ping).at_least(:once)
+
+        thread = Thread.new { server.send(:activity_monitor_loop) }
+        sleep 1.2 # Allow time for at least one ping
+        thread.kill
+      end
+
+      it 'checks for inactivity closure conditions' do
+        # Setup for inactivity closure
+        server.instance_variable_set(:@close_after, 1)
+        server.instance_variable_set(:@last_activity_time, Time.now - 2)
+
+        # Create a direct expectation for the checks to be made
+        expect(server).to receive(:cleanup).at_least(:once)
+
+        # Run only a portion of the activity_monitor functionality
+        # Directly test the inactivity closure logic
+        server.send(:activity_monitor_loop)
+      end
+
+      it 'checks connection and SSE status before processing' do
+        # Setup that the connection is closed for this test
+        server.instance_variable_set(:@connection_established, false)
+
+        # Test that the method exits early and doesn't try to ping
+        expect(server).not_to receive(:attempt_ping)
+
+        # Directly call activity_monitor_loop
+        server.send(:activity_monitor_loop)
+      end
+
+      it 'requires both connection and SSE to be active' do
+        # Setup SSE as inactive for this test
+        server.instance_variable_set(:@sse_connected, false)
+
+        # Test that the method exits early and doesn't try to ping
+        expect(server).not_to receive(:attempt_ping)
+
+        # Directly call activity_monitor_loop
+        server.send(:activity_monitor_loop)
+      end
+
+      it 'does not increment ping failures when connection is closed' do
+        # Setup partially connected state
+        server.instance_variable_set(:@connection_established, false)
+        allow(server).to receive(:ping).and_raise('Ping error')
+
+        # Should not increment failures when connection is already closed
+        expect do
+          server.send(:attempt_ping)
+        end.not_to(change { server.instance_variable_get(:@consecutive_ping_failures) })
+      end
+    end
+
     it 'calculates close_after as a multiple of ping interval' do
       ping_value = 15
       server = described_class.new(base_url: 'https://example.com', ping: ping_value)

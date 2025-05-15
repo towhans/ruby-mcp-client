@@ -14,6 +14,15 @@ module MCPClient
     # Ratio of close_after timeout to ping interval
     CLOSE_AFTER_PING_RATIO = 2.5
 
+    # Default values for connection monitoring
+    DEFAULT_MAX_PING_FAILURES = 3
+    DEFAULT_MAX_RECONNECT_ATTEMPTS = 5
+
+    # Reconnection backoff constants
+    BASE_RECONNECT_DELAY = 0.5
+    MAX_RECONNECT_DELAY = 30
+    JITTER_FACTOR = 0.25
+
     attr_reader :base_url, :tools, :server_info, :capabilities
 
     # @param base_url [String] The base URL of the MCP server
@@ -178,32 +187,56 @@ module MCPClient
     end
 
     # Clean up the server connection
-    # Properly closes HTTP connections and clears cached tools
+    # Properly closes HTTP connections and clears cached state
+    #
+    # @note This method preserves ping failure and reconnection metrics between
+    #   reconnection attempts, allowing the client to track failures across
+    #   multiple connection attempts. This is essential for proper reconnection
+    #   logic and exponential backoff.
     def cleanup
       @mutex.synchronize do
-        begin
-          @sse_thread&.kill
-        rescue StandardError
-          nil
-        end
+        # Set flags first before killing threads to prevent race conditions
+        # where threads might check flags after they're set but before they're killed
+        @connection_established = false
+        @sse_connected = false
+        @initialized = false # Reset initialization state for reconnection
+
+        # Log cleanup for debugging
+        @logger.debug('Cleaning up SSE connection')
+
+        # Store threads locally to avoid race conditions
+        sse_thread = @sse_thread
+        activity_thread = @activity_timer_thread
+
+        # Clear thread references first
         @sse_thread = nil
+        @activity_timer_thread = nil
+
+        # Kill threads outside the critical section
+        begin
+          sse_thread&.kill
+        rescue StandardError => e
+          @logger.debug("Error killing SSE thread: #{e.message}")
+        end
 
         begin
-          @activity_timer_thread&.kill
-        rescue StandardError
-          nil
+          activity_thread&.kill
+        rescue StandardError => e
+          @logger.debug("Error killing activity thread: #{e.message}")
         end
-        @activity_timer_thread = nil
 
         if @http_client
           @http_client.finish if @http_client.started?
           @http_client = nil
         end
 
+        # Close Faraday connections if they exist
+        @rpc_conn = nil
+        @sse_conn = nil
+
         @tools = nil
-        @connection_established = false
-        @sse_connected = false
         # Don't clear auth error as we need it for reporting the correct error
+        # Don't reset @consecutive_ping_failures or @reconnect_attempts as they're tracked across reconnections
       end
     end
 
@@ -255,46 +288,177 @@ module MCPClient
 
     # Ping the server to keep the connection alive
     # @return [Hash] the result of the ping request
+    # @raise [MCPClient::Errors::ToolCallError] if ping times out or fails
+    # @raise [MCPClient::Errors::TransportError] if there's a connection error
+    # @raise [MCPClient::Errors::ServerError] if the server returns an error
     def ping
       rpc_request('ping')
     end
 
     private
 
-    # Start the activity monitor thread
-    # This thread monitors connection activity and:
-    # 1. Sends a ping if there's no activity for @ping_interval seconds
-    # 2. Closes the connection if there's no activity for @close_after seconds
+    # Start the activity monitor thread that handles connection maintenance
+    #
+    # This thread is responsible for three main tasks:
+    # 1. Sending pings after inactivity (@ping_interval seconds)
+    # 2. Closing idle connections after prolonged inactivity (@close_after seconds)
+    # 3. Automatically reconnecting after multiple ping failures
+    #
+    # Reconnection parameters:
+    # - @consecutive_ping_failures: Counter for consecutive failed pings
+    # - @max_ping_failures: Threshold to trigger reconnection (default: 3)
+    # - @reconnect_attempts: Counter for reconnection attempts
+    # - @max_reconnect_attempts: Maximum retry limit (default: 5)
     def start_activity_monitor
       return if @activity_timer_thread&.alive?
 
-      @mutex.synchronize { @last_activity_time = Time.now }
+      @mutex.synchronize do
+        @last_activity_time = Time.now
+        @consecutive_ping_failures = 0
+        @max_ping_failures = DEFAULT_MAX_PING_FAILURES # Reconnect after this many failures
+        @reconnect_attempts = 0
+        @max_reconnect_attempts = DEFAULT_MAX_RECONNECT_ATTEMPTS # Give up after this many reconnect attempts
+      end
 
       @activity_timer_thread = Thread.new do
-        loop do
-          sleep 1 # Check every second
-
-          last_activity = nil
-          @mutex.synchronize { last_activity = @last_activity_time }
-
-          time_since_activity = Time.now - last_activity
-
-          if @close_after && time_since_activity >= @close_after
-            @logger.info("Closing connection due to inactivity (#{time_since_activity.round(1)}s)")
-            cleanup
-            break
-          elsif @ping_interval && time_since_activity >= @ping_interval
-            begin
-              @logger.debug("Sending ping after #{time_since_activity.round(1)}s of inactivity")
-              ping
-              @mutex.synchronize { @last_activity_time = Time.now }
-            rescue StandardError => e
-              @logger.error("Error sending ping: #{e.message}")
-            end
-          end
-        end
+        activity_monitor_loop
       rescue StandardError => e
         @logger.error("Activity monitor error: #{e.message}")
+      end
+    end
+
+    # Helper method to check if connection is active
+    # @return [Boolean] true if connection is established and SSE is connected
+    def connection_active?
+      @mutex.synchronize { @connection_established && @sse_connected }
+    end
+
+    # Main activity monitoring loop
+    def activity_monitor_loop
+      loop do
+        sleep 1 # Check every second
+
+        # Exit if connection is not active
+        unless connection_active?
+          @logger.debug('Activity monitor exiting: connection no longer active')
+          return
+        end
+
+        # Initialize variables if they don't exist yet
+        @mutex.synchronize do
+          @consecutive_ping_failures ||= 0
+          @reconnect_attempts ||= 0
+          @max_ping_failures ||= DEFAULT_MAX_PING_FAILURES
+          @max_reconnect_attempts ||= DEFAULT_MAX_RECONNECT_ATTEMPTS
+        end
+
+        # Check if connection was closed after our check
+        return unless connection_active?
+
+        # Get time since last activity
+        time_since_activity = Time.now - @last_activity_time
+
+        # Handle inactivity closure
+        if @close_after && time_since_activity >= @close_after
+          @logger.info("Closing connection due to inactivity (#{time_since_activity.round(1)}s)")
+          cleanup
+          return
+        end
+
+        # Handle ping if needed
+        next unless @ping_interval && time_since_activity >= @ping_interval
+        return unless connection_active?
+
+        # Determine if we should reconnect or ping
+        if @consecutive_ping_failures >= @max_ping_failures
+          attempt_reconnection
+        else
+          attempt_ping
+        end
+      end
+    end
+
+    # This section intentionally removed, as these methods were consolidated into activity_monitor_loop
+
+    # Attempt to reconnect when consecutive pings have failed
+    # @return [void]
+    def attempt_reconnection
+      if @reconnect_attempts < @max_reconnect_attempts
+        begin
+          # Calculate backoff delay with jitter to prevent thundering herd
+          base_delay = BASE_RECONNECT_DELAY * (2**@reconnect_attempts)
+          jitter = rand * JITTER_FACTOR * base_delay # Add randomness to prevent thundering herd
+          backoff_delay = [base_delay + jitter, MAX_RECONNECT_DELAY].min
+
+          reconnect_msg = "Attempting to reconnect (attempt #{@reconnect_attempts + 1}/#{@max_reconnect_attempts}) "
+          reconnect_msg += "after #{@consecutive_ping_failures} consecutive ping failures. "
+          reconnect_msg += "Waiting #{backoff_delay.round(2)}s before reconnect..."
+          @logger.warn(reconnect_msg)
+          sleep(backoff_delay)
+
+          # Close existing connection
+          cleanup
+
+          # Try to reconnect
+          connect
+          @logger.info('Successfully reconnected after ping failures')
+
+          # Reset counters
+          @mutex.synchronize do
+            @consecutive_ping_failures = 0
+            @reconnect_attempts += 1
+            @last_activity_time = Time.now
+          end
+        rescue StandardError => e
+          @logger.error("Failed to reconnect after ping failures: #{e.message}")
+          @mutex.synchronize { @reconnect_attempts += 1 }
+        end
+      else
+        # We've exceeded max reconnect attempts
+        @logger.error("Exceeded maximum reconnection attempts (#{@max_reconnect_attempts}). Closing connection.")
+        cleanup
+      end
+    end
+
+    # Attempt to ping the server
+    def attempt_ping
+      unless connection_active?
+        @logger.debug('Skipping ping - connection not active')
+        return
+      end
+
+      time_since = Time.now - @last_activity_time
+      @logger.debug("Sending ping after #{time_since.round(1)}s of inactivity")
+
+      begin
+        ping
+        @mutex.synchronize do
+          @last_activity_time = Time.now
+          @consecutive_ping_failures = 0 # Reset counter on successful ping
+        end
+      rescue StandardError => e
+        # Check if connection is still active before counting as failure
+        unless connection_active?
+          @logger.debug("Ignoring ping failure - connection already closed: #{e.message}")
+          return
+        end
+        handle_ping_failure(e)
+      end
+    end
+
+    # Handle ping failure
+    # @param error [StandardError] the error that occurred during ping
+    def handle_ping_failure(error)
+      @mutex.synchronize { @consecutive_ping_failures += 1 }
+      consecutive_failures = @consecutive_ping_failures
+
+      if consecutive_failures == 1
+        # Log full error on first failure
+        @logger.error("Error sending ping: #{error.message}")
+      else
+        # Log more concise message on subsequent failures
+        error_msg = error.message.split("\n").first
+        @logger.warn("Ping failed (#{consecutive_failures}/#{@max_ping_failures}): #{error_msg}")
       end
     end
 

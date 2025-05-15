@@ -1,5 +1,13 @@
 # Changelog
 
+## 0.5.4 (Unreleased)
+
+- Fixed ping errors in SSE connection by adding proper connection state validation
+- Improved connection state handling to prevent ping attempts on closed connections
+- Simplified code structure with a dedicated connection_active? helper method
+- Reduced parameter passing complexity for better code maintainability
+- Enhanced thread safety with more consistent connection state handling
+
 ## 0.5.3 (2025-05-13)
 
 - Added `to_google_tools` method for Google Vertex AI API integration (by @IMhide)

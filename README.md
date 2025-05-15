@@ -146,7 +146,8 @@ sse_client = MCPClient.create_client(
       read_timeout: 30,  # Timeout in seconds for request fulfillment
       ping: 10,          # Send ping after 10 seconds of inactivity
                          # Connection closes automatically after inactivity (2.5x ping interval)
-      retries: 2         # Number of retry attempts on transient errors
+      retries: 2,        # Number of retry attempts on transient errors
+      logger: logger     # Optional logger for debugging connection issues
     )
   ]
 )
@@ -362,6 +363,13 @@ The SSE client implementation provides these key features:
   - **Automatic ping**: Sends ping requests after a configurable period of inactivity (default: 10 seconds)
   - **Automatic disconnection**: Closes idle connections after inactivity (2.5× ping interval)
   - **MCP compliant**: Any server communication resets the inactivity timer per specification
+- **Intelligent reconnection**:
+  - **Ping failure detection**: Tracks consecutive ping failures (when server isn't responding)
+  - **Automatic reconnection**: Attempts to reconnect after 3 consecutive ping failures
+  - **Exponential backoff**: Uses increasing delays between reconnection attempts
+  - **Smart retry limits**: Caps reconnection attempts (default: 5) to avoid infinite loops
+  - **Connection state monitoring**: Properly detects and handles closed connections to prevent errors
+  - **Failure transparency**: Handles reconnection in the background without disrupting client code
 - **Thread safety**: All operations are thread-safe using monitors and synchronized access
 - **Reliable error handling**: Comprehensive error handling for network issues, timeouts, and malformed responses
 - **JSON-RPC over SSE**: Full implementation of JSON-RPC 2.0 over SSE transport with initialize handshake
