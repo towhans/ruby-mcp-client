@@ -1,6 +1,6 @@
 # Changelog
 
-## 0.6.0 (Unreleased)
+## 0.6.0 (2025-05-16)
 
 - Server names are now properly retained after configuration parsing
 - Added `find_server` method to retrieve servers by name
