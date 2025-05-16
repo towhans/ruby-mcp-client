@@ -15,6 +15,7 @@ module MCPClient
           retries: config[:retries] || 0,
           retry_backoff: config[:retry_backoff] || 1,
           read_timeout: config[:read_timeout] || MCPClient::ServerStdio::READ_TIMEOUT,
+          name: config[:name],
           logger: config[:logger] || logger
         )
       when 'sse'
@@ -25,6 +26,7 @@ module MCPClient
           ping: config[:ping] || 10,
           retries: config[:retries] || 0,
           retry_backoff: config[:retry_backoff] || 1,
+          name: config[:name],
           logger: config[:logger] || logger
         )
       else

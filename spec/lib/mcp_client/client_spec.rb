@@ -3,12 +3,13 @@
 require 'spec_helper'
 
 RSpec.describe MCPClient::Client do
-  let(:mock_server) { instance_double(MCPClient::ServerBase) }
+  let(:mock_server) { instance_double(MCPClient::ServerBase, name: 'server1') }
   let(:mock_tool) do
     MCPClient::Tool.new(
       name: 'test_tool',
       description: 'A test tool',
-      schema: { 'type' => 'object', 'properties' => { 'param' => { 'type' => 'string' } } }
+      schema: { 'type' => 'object', 'properties' => { 'param' => { 'type' => 'string' } } },
+      server: mock_server
     )
   end
 
@@ -85,6 +86,49 @@ RSpec.describe MCPClient::Client do
 
     it "raises ToolNotFound if tool doesn't exist" do
       expect { client.call_tool('nonexistent_tool', {}) }.to raise_error(MCPClient::Errors::ToolNotFound)
+    end
+
+    context 'with server disambiguation' do
+      let(:mock_server2) { instance_double(MCPClient::ServerBase, name: 'server2') }
+      let(:duplicate_tool) do
+        MCPClient::Tool.new(
+          name: 'test_tool',
+          description: 'Same-named tool on server2',
+          schema: { 'type' => 'object', 'properties' => {} },
+          server: mock_server2
+        )
+      end
+      let(:server2_result) { { 'result' => 'from_server2' } }
+      let(:multi_client) do
+        client = described_class.new(mcp_server_configs: [
+                                       { type: 'stdio', command: 'test1' },
+                                       { type: 'stdio', command: 'test2' }
+                                     ])
+        client.instance_variable_set(:@servers, [mock_server, mock_server2])
+        client
+      end
+
+      before do
+        allow(mock_server2).to receive_messages(list_tools: [duplicate_tool], call_tool: server2_result,
+                                                on_notification: nil)
+        allow(multi_client).to receive(:list_tools).and_return([mock_tool, duplicate_tool])
+      end
+
+      it 'raises AmbiguousToolName when duplicate tools exist' do
+        expect { multi_client.call_tool('test_tool', {}) }.to raise_error(MCPClient::Errors::AmbiguousToolName)
+      end
+
+      it 'calls the tool on the specified server by name' do
+        result = multi_client.call_tool('test_tool', {}, server: 'server2')
+        expect(mock_server2).to have_received(:call_tool).with('test_tool', {})
+        expect(result).to eq(server2_result)
+      end
+
+      it 'calls the tool on the specified server instance' do
+        result = multi_client.call_tool('test_tool', {}, server: mock_server2)
+        expect(mock_server2).to have_received(:call_tool).with('test_tool', {})
+        expect(result).to eq(server2_result)
+      end
     end
   end
 
@@ -237,12 +281,13 @@ RSpec.describe MCPClient::Client do
     end
   end
 
-  describe 'convenience methods: #find_tools and #find_tool' do
+  describe 'convenience methods: #find_tools, #find_tool, and #find_server' do
     let(:other_tool) do
       MCPClient::Tool.new(
         name: 'another_tool',
         description: 'Another test tool',
-        schema: { 'type' => 'object', 'properties' => {} }
+        schema: { 'type' => 'object', 'properties' => {} },
+        server: mock_server
       )
     end
     let(:client) { described_class.new(mcp_server_configs: [{ type: 'stdio', command: 'test' }]) }
@@ -264,6 +309,16 @@ RSpec.describe MCPClient::Client do
       tool = client.find_tool(/another_/)
       expect(tool).to eq(other_tool)
     end
+
+    it 'find_server returns a server by name' do
+      server = client.find_server('server1')
+      expect(server).to eq(mock_server)
+    end
+
+    it 'find_server returns nil if server not found' do
+      server = client.find_server('nonexistent')
+      expect(server).to be_nil
+    end
   end
 
   describe '#call_tool validation' do
@@ -275,7 +330,8 @@ RSpec.describe MCPClient::Client do
           'type' => 'object',
           'properties' => { 'a' => { 'type' => 'string' }, 'b' => { 'type' => 'string' } },
           'required' => %w[a b]
-        }
+        },
+        server: mock_server
       )
     end
     let(:client) { described_class.new(mcp_server_configs: [{ type: 'stdio', command: 'test' }]) }
@@ -303,7 +359,8 @@ RSpec.describe MCPClient::Client do
       MCPClient::Tool.new(
         name: 'test_tool',
         description: 'A test tool',
-        schema: {}
+        schema: {},
+        server: mock_server
       )
     end
     let(:client) { described_class.new(mcp_server_configs: [{ type: 'stdio', command: 'test' }]) }
@@ -315,7 +372,7 @@ RSpec.describe MCPClient::Client do
     context 'when server does not support streaming' do
       before do
         allow(mock_server).to receive(:call_tool).and_return('single_result')
-        allow(mock_server).to receive(:respond_to?).with(:call_tool_streaming).and_return(false)
+        allow(mock_server).to receive(:call_tool_streaming).and_return(Enumerator.new { |y| y << 'single_result' })
       end
 
       it 'returns an Enumerator yielding the single result' do
@@ -326,19 +383,71 @@ RSpec.describe MCPClient::Client do
     end
 
     context 'when server supports streaming' do
-      let(:stream_enum) { [1, 2, 3].to_enum }
-      let(:mock_stream_server) do
-        double('server', list_tools: [stream_tool], call_tool_streaming: stream_enum, on_notification: nil)
-      end
+      let(:stream_enum) { Enumerator.new { |y| [1, 2, 3].each { |i| y << i } } }
+
       before do
-        allow(MCPClient::ServerFactory).to receive(:create).and_return(mock_stream_server)
-        allow(mock_stream_server).to receive(:on_notification).and_yield('test_event', {})
+        # Create a new client with a different mock server that supports streaming
+        allow(mock_server).to receive(:call_tool_streaming).and_return(stream_enum)
       end
 
       it 'delegates to server.call_tool_streaming' do
         enum = client.call_tool_streaming('test_tool', {})
-        expect(enum).to eq(stream_enum)
+        expect(enum).to be_an(Enumerator)
+        # We can't directly compare the enumerators, but we can compare their outputs
         expect(enum.to_a).to eq([1, 2, 3])
+        # Verify the mock was called
+        expect(mock_server).to have_received(:call_tool_streaming).with('test_tool', {})
+      end
+    end
+
+    context 'with server disambiguation' do
+      let(:mock_server2) { instance_double(MCPClient::ServerBase, name: 'server2') }
+      let(:duplicate_tool) do
+        MCPClient::Tool.new(
+          name: 'test_tool',
+          description: 'Same-named tool on server2',
+          schema: {},
+          server: mock_server2
+        )
+      end
+      let(:server2_stream) { Enumerator.new { |y| [4, 5, 6].each { |i| y << i } } }
+      let(:multi_client) do
+        client = described_class.new(mcp_server_configs: [
+                                       { type: 'stdio', command: 'test1' },
+                                       { type: 'stdio', command: 'test2' }
+                                     ])
+        client.instance_variable_set(:@servers, [mock_server, mock_server2])
+        client
+      end
+
+      before do
+        # Make sure mock_server responds to call_tool_streaming
+        allow(mock_server).to receive(:call_tool_streaming).and_return(Enumerator.new { |y|
+          [1, 2, 3].each do |i|
+            y << i
+          end
+        })
+        allow(mock_server).to receive(:respond_to?).with(:call_tool_streaming).and_return(true)
+
+        # Setup mock_server2
+        allow(mock_server2).to receive(:call_tool_streaming).and_return(server2_stream)
+        allow(mock_server2).to receive(:respond_to?).with(:call_tool_streaming).and_return(true)
+        allow(mock_server2).to receive_messages(list_tools: [duplicate_tool], on_notification: nil)
+
+        # Setup multi_client
+        allow(multi_client).to receive(:list_tools).and_return([stream_tool, duplicate_tool])
+      end
+
+      it 'raises AmbiguousToolName when duplicate tools exist' do
+        expect do
+          multi_client.call_tool_streaming('test_tool', {})
+        end.to raise_error(MCPClient::Errors::AmbiguousToolName)
+      end
+
+      it 'streams from the specified server by name' do
+        enum = multi_client.call_tool_streaming('test_tool', {}, server: 'server2')
+        expect(mock_server2).to have_received(:call_tool_streaming).with('test_tool', {})
+        expect(enum).to eq(server2_stream)
       end
     end
   end
@@ -425,7 +534,7 @@ RSpec.describe MCPClient::Client do
     end
 
     context 'with multiple servers' do
-      let(:mock_server2) { instance_double(MCPClient::ServerBase) }
+      let(:mock_server2) { instance_double(MCPClient::ServerBase, name: 'server2') }
       let(:multi_client) do
         client = described_class.new(mcp_server_configs: [
                                        { type: 'stdio', command: 'test1' },
@@ -451,6 +560,12 @@ RSpec.describe MCPClient::Client do
         expect(multi_client).to receive(:select_server).with('stdio').and_return(mock_server2)
 
         result = multi_client.send_rpc('test_method', params: { arg: 'value' }, server: 'stdio')
+        expect(mock_server2).to have_received(:rpc_request).with('test_method', { arg: 'value' })
+        expect(result).to eq({ 'result' => 'server2' })
+      end
+
+      it 'sends RPC to server by name' do
+        result = multi_client.send_rpc('test_method', params: { arg: 'value' }, server: 'server2')
         expect(mock_server2).to have_received(:rpc_request).with('test_method', { arg: 'value' })
         expect(result).to eq({ 'result' => 'server2' })
       end

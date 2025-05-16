@@ -98,3 +98,9 @@ final = client.chat(
 puts final.dig('choices', 0, 'message', 'content')
 
 sleep 5
+
+mcp_client.call_tool('browser_close', {})
+
+# Clean up connections
+mcp_client.cleanup
+puts "\nConnections cleaned up"

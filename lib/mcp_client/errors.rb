@@ -23,7 +23,11 @@ module MCPClient
 
     # Raised when there's an error in the MCP server transport
     class TransportError < MCPError; end
+
     # Raised when tool parameters fail validation against JSON schema
     class ValidationError < MCPError; end
+
+    # Raised when multiple tools with the same name exist across different servers
+    class AmbiguousToolName < MCPError; end
   end
 end

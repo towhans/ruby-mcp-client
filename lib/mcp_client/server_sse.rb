@@ -31,12 +31,13 @@ module MCPClient
     # @param ping [Integer] Time in seconds after which to send ping if no activity (default: 10)
     # @param retries [Integer] number of retry attempts on transient errors
     # @param retry_backoff [Numeric] base delay in seconds for exponential backoff
+    # @param name [String, nil] optional name for this server
     # @param logger [Logger, nil] optional logger
     def initialize(base_url:, headers: {}, read_timeout: 30, ping: 10,
-                   retries: 0, retry_backoff: 1, logger: nil)
-      super()
+                   retries: 0, retry_backoff: 1, name: nil, logger: nil)
+      super(name: name)
       @logger = logger || Logger.new($stdout, level: Logger::WARN)
-      @logger.progname = self.class.name
+      @logger.progname = name ? "#{self.class.name}[#{name}]" : self.class.name
       @logger.formatter = proc { |severity, _datetime, progname, msg| "#{severity} [#{progname}] #{msg}\n" }
       @max_retries = retries
       @retry_backoff = retry_backoff
@@ -100,7 +101,7 @@ module MCPClient
         tools_data = request_tools_list
         @mutex.synchronize do
           @tools = tools_data.map do |tool_data|
-            MCPClient::Tool.from_json(tool_data)
+            MCPClient::Tool.from_json(tool_data, server: self)
           end
         end
 

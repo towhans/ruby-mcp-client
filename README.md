@@ -48,11 +48,15 @@ require 'mcp_client'
 client = MCPClient.create_client(
   mcp_server_configs: [
     # Local stdio server
-    MCPClient.stdio_config(command: 'npx -y @modelcontextprotocol/server-filesystem /home/user'),
+    MCPClient.stdio_config(
+      command: 'npx -y @modelcontextprotocol/server-filesystem /home/user',
+      name: 'filesystem' # Optional name for this server
+    ),
     # Remote HTTP SSE server (with streaming support)
     MCPClient.sse_config(
       base_url: 'https://api.example.com/sse',
       headers: { 'Authorization' => 'Bearer YOUR_TOKEN' },
+      name: 'api',      # Optional name for this server
       read_timeout: 30, # Optional timeout in seconds (default: 30)
       ping: 10,         # Optional ping interval in seconds of inactivity (default: 10)
                         # Connection closes automatically after inactivity (2.5x ping interval)
@@ -78,9 +82,13 @@ client = MCPClient.create_client(
 #    [{ "type": "stdio", "command": "npx server" }, { "type": "sse", "url": "http://..." }]
 # 3. An object with "mcpServers" key containing named servers:
 #    { "mcpServers": { "server1": { "type": "sse", "url": "http://..." } } }
+#    Note: When using this format, server1 will be accessible by name
 
 # List available tools
 tools = client.list_tools
+
+# Find a server by name
+filesystem_server = client.find_server('filesystem')
 
 # Find tools by name pattern (string or regex)
 file_tools = client.find_tools('file')
@@ -89,15 +97,20 @@ first_tool = client.find_tool(/^file_/)
 # Call a specific tool by name
 result = client.call_tool('example_tool', { param1: 'value1', param2: 42 })
 
+# Call a tool on a specific server by name
+result = client.call_tool('example_tool', { param1: 'value1' }, server: 'filesystem')
+# You can also call a tool on a server directly
+result = filesystem_server.call_tool('example_tool', { param1: 'value1' })
+
 # Call multiple tools in batch
 results = client.call_tools([
   { name: 'tool1', parameters: { key1: 'value1' } },
-  { name: 'tool2', parameters: { key2: 'value2' } }
+  { name: 'tool2', parameters: { key2: 'value2' }, server: 'filesystem' } # Specify server for a specific tool
 ])
 
 # Stream results (supported by the SSE transport)
 # Returns an Enumerator that yields results as they become available
-client.call_tool_streaming('streaming_tool', { param: 'value' }).each do |chunk|
+client.call_tool_streaming('streaming_tool', { param: 'value' }, server: 'api').each do |chunk|
   # Process each chunk as it arrives
   puts chunk
 end
@@ -109,13 +122,14 @@ google_tools = client.to_google_tools
 
 # Register for server notifications
 client.on_notification do |server, method, params|
-  puts "Server notification: #{server.class} - #{method} - #{params}"
+  puts "Server notification: #{server.class}[#{server.name}] - #{method} - #{params}"
   # Handle specific notifications based on method name
   # 'notifications/tools/list_changed' is handled automatically by the client
 end
 
 # Send custom JSON-RPC requests or notifications
-client.send_rpc('custom_method', params: { key: 'value' }, server: :sse) # Uses specific server
+client.send_rpc('custom_method', params: { key: 'value' }, server: :sse) # Uses specific server by type
+client.send_rpc('custom_method', params: { key: 'value' }, server: 'filesystem') # Uses specific server by name
 result = client.send_rpc('another_method', params: { data: 123 }) # Uses first available server
 client.send_notification('status_update', params: { status: 'ready' })
 
@@ -347,15 +361,19 @@ Special configuration options:
 
 - **Multiple transports** - Support for both stdio and SSE transports
 - **Multiple servers** - Connect to multiple MCP servers simultaneously
+- **Named servers** - Associate names with servers and find/reference them by name
+- **Server lookup** - Find servers by name using `find_server`
+- **Tool association** - Each tool knows which server it belongs to
 - **Tool discovery** - Find tools by name or pattern
+- **Server disambiguation** - Specify which server to use when tools with same name exist in multiple servers
 - **Atomic tool calls** - Simple API for invoking tools with parameters
 - **Batch support** - Call multiple tools in a single operation
-- **API conversions** - Built-in format conversion for OpenAI and Anthropic APIs
+- **API conversions** - Built-in format conversion for OpenAI, Anthropic, and Google Vertex AI APIs
 - **Thread safety** - Synchronized access for thread-safe operation
 - **Server notifications** - Support for JSON-RPC notifications
 - **Custom RPC methods** - Send any custom JSON-RPC method
 - **Consistent error handling** - Rich error types for better exception handling
-- **JSON configuration** - Support for server definition files in JSON format
+- **JSON configuration** - Support for server definition files in JSON format with name retention
 
 ### Server-Sent Events (SSE) Implementation
 

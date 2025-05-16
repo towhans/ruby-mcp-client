@@ -79,18 +79,42 @@ module MCPClient
     # Calls a specific tool by name with the given parameters
     # @param tool_name [String] the name of the tool to call
     # @param parameters [Hash] the parameters to pass to the tool
+    # @param server [String, Symbol, Integer, MCPClient::ServerBase, nil] optional server to use
     # @return [Object] the result of the tool invocation
-    def call_tool(tool_name, parameters)
+    def call_tool(tool_name, parameters, server: nil)
       tools = list_tools
-      tool = tools.find { |t| t.name == tool_name }
 
-      raise MCPClient::Errors::ToolNotFound, "Tool '#{tool_name}' not found" unless tool
+      if server
+        # Use the specified server
+        srv = select_server(server)
+        # Find the tool on this specific server
+        tool = tools.find { |t| t.name == tool_name && t.server == srv }
+        unless tool
+          raise MCPClient::Errors::ToolNotFound,
+                "Tool '#{tool_name}' not found on server '#{srv.name || srv.class.name}'"
+        end
+      else
+        # Find the tool across all servers
+        matching_tools = tools.select { |t| t.name == tool_name }
+
+        if matching_tools.empty?
+          raise MCPClient::Errors::ToolNotFound, "Tool '#{tool_name}' not found"
+        elsif matching_tools.size > 1
+          # If multiple matches, disambiguate with server names
+          server_names = matching_tools.map { |t| t.server&.name || 'unnamed' }
+          raise MCPClient::Errors::AmbiguousToolName,
+                "Multiple tools named '#{tool_name}' found across servers (#{server_names.join(', ')}). " \
+                "Please specify a server using the 'server' parameter."
+        end
+
+        tool = matching_tools.first
+      end
 
       # Validate parameters against tool schema
       validate_params!(tool, parameters)
 
-      # Find the server that owns this tool
-      server = find_server_for_tool(tool)
+      # Use the tool's associated server
+      server = tool.server
       raise MCPClient::Errors::ServerNotFound, "No server found for tool '#{tool_name}'" unless server
 
       server.call_tool(tool_name, parameters)
@@ -114,6 +138,9 @@ module MCPClient
       tools.map(&:to_anthropic_tool)
     end
 
+    # Convert MCP tools to Google Vertex AI tool specifications
+    # @param tool_names [Array<String>, nil] optional list of tool names to include, nil means all tools
+    # @return [Array<Hash>] Google Vertex AI tool specifications with cleaned schemas
     def to_google_tools(tool_names: nil)
       tools = list_tools
       tools = tools.select { |t| tool_names.include?(t.name) } if tool_names
@@ -138,6 +165,13 @@ module MCPClient
       @notification_listeners << block
     end
 
+    # Find a server by name
+    # @param name [String] the name of the server to find
+    # @return [MCPClient::ServerBase, nil] the server with the given name, or nil if not found
+    def find_server(name)
+      @servers.find { |s| s.name == name }
+    end
+
     # Find all tools whose name matches the given pattern (String or Regexp)
     # @param pattern [String, Regexp] pattern to match tool names
     # @return [Array<MCPClient::Tool>] matching tools
@@ -154,13 +188,15 @@ module MCPClient
     end
 
     # Call multiple tools in batch
-    # @param calls [Array<Hash>] array of calls in the form { name: tool_name, parameters: {...} }
+    # @param calls [Array<Hash>] array of calls in the form:
+    #   { name: tool_name, parameters: {...}, server: optional_server_name }
     # @return [Array<Object>] array of results for each tool invocation
     def call_tools(calls)
       calls.map do |call|
         name = call[:name] || call['name']
         params = call[:parameters] || call['parameters'] || {}
-        call_tool(name, params)
+        server = call[:server] || call['server']
+        call_tool(name, params, server: server)
       end
     end
 
@@ -168,25 +204,46 @@ module MCPClient
     # Returns an Enumerator yielding streaming updates if supported.
     # @param tool_name [String] the name of the tool to call
     # @param parameters [Hash] the parameters to pass to the tool
+    # @param server [String, Symbol, Integer, MCPClient::ServerBase, nil] optional server to use
     # @return [Enumerator] streaming enumerator or single-value enumerator
-    def call_tool_streaming(tool_name, parameters)
+    def call_tool_streaming(tool_name, parameters, server: nil)
       tools = list_tools
-      tool = tools.find { |t| t.name == tool_name }
-      raise MCPClient::Errors::ToolNotFound, "Tool '#{tool_name}' not found" unless tool
+
+      if server
+        # Use the specified server
+        srv = select_server(server)
+        # Find the tool on this specific server
+        tool = tools.find { |t| t.name == tool_name && t.server == srv }
+        unless tool
+          raise MCPClient::Errors::ToolNotFound,
+                "Tool '#{tool_name}' not found on server '#{srv.name || srv.class.name}'"
+        end
+      else
+        # Find the tool across all servers
+        matching_tools = tools.select { |t| t.name == tool_name }
+
+        if matching_tools.empty?
+          raise MCPClient::Errors::ToolNotFound, "Tool '#{tool_name}' not found"
+        elsif matching_tools.size > 1
+          # If multiple matches, disambiguate with server names
+          server_names = matching_tools.map { |t| t.server&.name || 'unnamed' }
+          raise MCPClient::Errors::AmbiguousToolName,
+                "Multiple tools named '#{tool_name}' found across servers (#{server_names.join(', ')}). " \
+                "Please specify a server using the 'server' parameter."
+        end
+
+        tool = matching_tools.first
+      end
 
       # Validate parameters against tool schema
       validate_params!(tool, parameters)
-      # Find the server that owns this tool
-      server = find_server_for_tool(tool)
+
+      # Use the tool's associated server
+      server = tool.server
       raise MCPClient::Errors::ServerNotFound, "No server found for tool '#{tool_name}'" unless server
 
-      if server.respond_to?(:call_tool_streaming)
-        server.call_tool_streaming(tool_name, parameters)
-      else
-        Enumerator.new do |yielder|
-          yielder << server.call_tool(tool_name, parameters)
-        end
-      end
+      # Use the streaming API if it's available
+      server.call_tool_streaming(tool_name, parameters)
     end
 
     # Ping the MCP server to check connectivity (zero-parameter heartbeat call)
@@ -238,20 +295,24 @@ module MCPClient
     # @param params [Hash] parameters for the notification
     # @return [void]
     def process_notification(server, method, params)
+      server_id = server.name ? "#{server.class}[#{server.name}]" : server.class
       case method
       when 'notifications/tools/list_changed'
-        logger.warn("[#{server.class}] Tool list has changed, clearing tool cache")
+        logger.warn("[#{server_id}] Tool list has changed, clearing tool cache")
         clear_cache
       when 'notifications/resources/updated'
-        logger.warn("[#{server.class}] Resource #{params['uri']} updated")
+        logger.warn("[#{server_id}] Resource #{params['uri']} updated")
       when 'notifications/prompts/list_changed'
-        logger.warn("[#{server.class}] Prompt list has changed")
+        logger.warn("[#{server_id}] Prompt list has changed")
       when 'notifications/resources/list_changed'
-        logger.warn("[#{server.class}] Resource list has changed")
+        logger.warn("[#{server_id}] Resource list has changed")
+      else
+        # Log unknown notification types for debugging purposes
+        logger.debug("[#{server_id}] Received unknown notification: #{method} - #{params}")
       end
     end
 
-    # Select a server based on index, type, or instance
+    # Select a server based on index, name, type, or instance
     # @param server_arg [Integer, String, Symbol, MCPClient::ServerBase, nil] server selector
     # @return [MCPClient::ServerBase]
     def select_server(server_arg)
@@ -266,15 +327,20 @@ module MCPClient
         end
       when String, Symbol
         key = server_arg.to_s.downcase
+
+        # First check if it's a server name match
+        srv = @servers.find { |s| s.name && s.name.downcase == key }
+        return srv if srv
+
+        # Then check if it's a server type match
         srv = @servers.find { |s| s.class.name.split('::').last.downcase.end_with?(key) }
-        raise MCPClient::Errors::ServerNotFound, "Server of type #{server_arg} not found" unless srv
+        raise MCPClient::Errors::ServerNotFound, "Server with name or type '#{server_arg}' not found" unless srv
 
         srv
       else
         raise ArgumentError, "Invalid server argument: #{server_arg.inspect}" unless @servers.include?(server_arg)
 
         server_arg
-
       end
     end
 

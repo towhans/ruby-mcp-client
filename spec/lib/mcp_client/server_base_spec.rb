@@ -10,6 +10,18 @@ RSpec.describe MCPClient::ServerBase do
     end.new
   end
 
+  describe '#initialize' do
+    it 'sets name to nil by default' do
+      server = described_class.new
+      expect(server.name).to be_nil
+    end
+
+    it 'sets name when provided' do
+      server = described_class.new(name: 'test_server')
+      expect(server.name).to eq('test_server')
+    end
+  end
+
   describe '#connect' do
     it 'raises NotImplementedError' do
       expect { base_server.connect }.to raise_error(NotImplementedError)
@@ -31,6 +43,16 @@ RSpec.describe MCPClient::ServerBase do
   describe '#cleanup' do
     it 'raises NotImplementedError' do
       expect { base_server.cleanup }.to raise_error(NotImplementedError)
+    end
+  end
+
+  describe '#call_tool_streaming' do
+    it 'creates an enumerator that yields call_tool result' do
+      # Stub call_tool to return a dummy value
+      allow(base_server).to receive(:call_tool).and_return('test_result')
+      enum = base_server.call_tool_streaming('tool', {})
+      expect(enum).to be_an(Enumerator)
+      expect(enum.to_a).to eq(['test_result'])
     end
   end
 end

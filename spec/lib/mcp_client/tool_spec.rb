@@ -29,6 +29,18 @@ RSpec.describe MCPClient::Tool do
       expect(tool.name).to eq(tool_name)
       expect(tool.description).to eq(tool_description)
       expect(tool.schema).to eq(tool_schema)
+      expect(tool.server).to be_nil
+    end
+
+    it 'sets server when provided' do
+      server = MCPClient::ServerBase.new(name: 'test_server')
+      tool_with_server = described_class.new(
+        name: tool_name,
+        description: tool_description,
+        schema: tool_schema,
+        server: server
+      )
+      expect(tool_with_server.server).to eq(server)
     end
   end
 
@@ -46,6 +58,13 @@ RSpec.describe MCPClient::Tool do
       expect(tool.name).to eq(tool_name)
       expect(tool.description).to eq(tool_description)
       expect(tool.schema).to eq(tool_schema)
+      expect(tool.server).to be_nil
+    end
+
+    it 'associates tool with server when provided' do
+      server = MCPClient::ServerBase.new(name: 'test_server')
+      tool = described_class.from_json(json_data, server: server)
+      expect(tool.server).to eq(server)
     end
   end
 

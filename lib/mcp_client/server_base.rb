@@ -3,6 +3,16 @@
 module MCPClient
   # Base class for MCP servers - serves as the interface for different server implementations
   class ServerBase
+    # @!attribute [r] name
+    #   @return [String] the name of the server
+    attr_reader :name
+
+    # Initialize the server with a name
+    # @param name [String, nil] server name
+    def initialize(name: nil)
+      @name = name
+    end
+
     # Initialize a connection to the MCP server
     # @return [Boolean] true if connection successful
     def connect
@@ -43,6 +53,16 @@ module MCPClient
     # @return [void]
     def rpc_notify(method, params = {})
       raise NotImplementedError, 'Subclasses must implement rpc_notify'
+    end
+
+    # Stream a tool call result (default implementation returns single-value stream)
+    # @param tool_name [String] the name of the tool to call
+    # @param parameters [Hash] the parameters to pass to the tool
+    # @return [Enumerator] stream of results
+    def call_tool_streaming(tool_name, parameters)
+      Enumerator.new do |yielder|
+        yielder << call_tool(tool_name, parameters)
+      end
     end
 
     # Ping the MCP server to check connectivity (zero-parameter heartbeat call)

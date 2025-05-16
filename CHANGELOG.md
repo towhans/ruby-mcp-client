@@ -1,10 +1,16 @@
 # Changelog
 
-## 0.5.4 (Unreleased)
+## 0.6.0 (Unreleased)
 
+- Server names are now properly retained after configuration parsing
+- Added `find_server` method to retrieve servers by name
+- Added server association in each tool for better traceability
+- Added tool call disambiguation by specifying server name
+- Added handling for ambiguous tool names with clear error messages
 - Improved logger propagation from Client to all Server instances
 - Fixed ping errors in SSE connection by adding proper connection state validation
 - Improved connection state handling to prevent ping attempts on closed connections
+- Enhanced error handling for unknown notification types
 - Simplified code structure with a dedicated connection_active? helper method
 - Reduced parameter passing complexity for better code maintainability
 - Enhanced thread safety with more consistent connection state handling

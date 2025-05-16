@@ -30,7 +30,11 @@ module MCPClient
         next unless validate_server_config(config, server_name)
 
         server_config = process_server_config(config, server_name)
-        result[server_name] = server_config if server_config
+        next unless server_config
+
+        # Add server name to the config
+        server_config[:name] = server_name
+        result[server_name] = server_config
       end
 
       result

@@ -17,9 +17,10 @@ module MCPClient
     # @param retries [Integer] number of retry attempts on transient errors
     # @param retry_backoff [Numeric] base delay in seconds for exponential backoff
     # @param read_timeout [Numeric] timeout in seconds for reading responses
+    # @param name [String, nil] optional name for this server
     # @param logger [Logger, nil] optional logger
-    def initialize(command:, retries: 0, retry_backoff: 1, read_timeout: READ_TIMEOUT, logger: nil)
-      super()
+    def initialize(command:, retries: 0, retry_backoff: 1, read_timeout: READ_TIMEOUT, name: nil, logger: nil)
+      super(name: name)
       @command = command.is_a?(Array) ? command.join(' ') : command
       @mutex = Mutex.new
       @cond = ConditionVariable.new
@@ -27,7 +28,7 @@ module MCPClient
       @pending = {}
       @initialized = false
       @logger = logger || Logger.new($stdout, level: Logger::WARN)
-      @logger.progname = self.class.name
+      @logger.progname = name ? "#{self.class.name}[#{name}]" : self.class.name
       @logger.formatter = proc { |severity, _datetime, progname, msg| "#{severity} [#{progname}] #{msg}\n" }
       @max_retries = retries
       @retry_backoff = retry_backoff
@@ -93,7 +94,7 @@ module MCPClient
         raise MCPClient::Errors::ServerError, err['message']
       end
 
-      (res.dig('result', 'tools') || []).map { |td| MCPClient::Tool.from_json(td) }
+      (res.dig('result', 'tools') || []).map { |td| MCPClient::Tool.from_json(td, server: self) }
     rescue StandardError => e
       raise MCPClient::Errors::ToolCallError, "Error listing tools: #{e.message}"
     end
