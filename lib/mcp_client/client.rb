@@ -117,7 +117,13 @@ module MCPClient
       server = tool.server
       raise MCPClient::Errors::ServerNotFound, "No server found for tool '#{tool_name}'" unless server
 
-      server.call_tool(tool_name, parameters)
+      begin
+        server.call_tool(tool_name, parameters)
+      rescue MCPClient::Errors::ConnectionError => e
+        # Add server identity information to the error for better context
+        server_id = server.name ? "#{server.class}[#{server.name}]" : server.class.name
+        raise MCPClient::Errors::ToolCallError, "Error calling tool '#{tool_name}': #{e.message} (Server: #{server_id})"
+      end
     end
 
     # Convert MCP tools to OpenAI function specifications
@@ -242,8 +248,15 @@ module MCPClient
       server = tool.server
       raise MCPClient::Errors::ServerNotFound, "No server found for tool '#{tool_name}'" unless server
 
-      # Use the streaming API if it's available
-      server.call_tool_streaming(tool_name, parameters)
+      begin
+        # Use the streaming API if it's available
+        server.call_tool_streaming(tool_name, parameters)
+      rescue MCPClient::Errors::ConnectionError => e
+        # Add server identity information to the error for better context
+        server_id = server.name ? "#{server.class}[#{server.name}]" : server.class.name
+        msg = "Error calling streaming tool '#{tool_name}': #{e.message} (Server: #{server_id})"
+        raise MCPClient::Errors::ToolCallError, msg
+      end
     end
 
     # Ping the MCP server to check connectivity (zero-parameter heartbeat call)

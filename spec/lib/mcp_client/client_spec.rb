@@ -88,6 +88,25 @@ RSpec.describe MCPClient::Client do
       expect { client.call_tool('nonexistent_tool', {}) }.to raise_error(MCPClient::Errors::ToolNotFound)
     end
 
+    it 'handles disconnected server errors' do
+      # Prepare a tool and server
+      test_tool = mock_tool
+      test_server = mock_server
+      client.instance_variable_set(:@tool_cache, { test_tool.name => test_tool })
+
+      # Simulate connection error when calling tool
+      connection_error = MCPClient::Errors::ConnectionError.new('Server connection lost: Connection refused')
+      allow(test_server).to receive(:call_tool).and_raise(connection_error)
+
+      # Should wrap ConnectionError in a ToolCallError with context
+      expect do
+        client.call_tool(test_tool.name, {})
+      end.to raise_error(
+        MCPClient::Errors::ToolCallError,
+        /Error calling tool .* Server connection lost: Connection refused \(Server: .*\)/
+      )
+    end
+
     context 'with server disambiguation' do
       let(:mock_server2) { instance_double(MCPClient::ServerBase, name: 'server2') }
       let(:duplicate_tool) do

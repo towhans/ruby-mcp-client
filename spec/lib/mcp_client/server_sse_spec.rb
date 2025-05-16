@@ -7,6 +7,44 @@ RSpec.describe MCPClient::ServerSSE do
   let(:base_url) { 'https://example.com/mcp' }
   let(:headers) { { 'Authorization' => 'Bearer token123' } }
   let(:server) { described_class.new(base_url: base_url, headers: headers) }
+
+  describe 'disconnected server handling' do
+    it 'correctly handles connection refused errors in send_jsonrpc_request' do
+      # Setup
+      URI.parse(base_url)
+      server.instance_variable_set(:@rpc_endpoint, '/messages')
+
+      # Simulate a connection refused error
+      error_msg = 'Failed to open TCP connection to localhost:3000 (Connection refused)'
+      connection_error = Faraday::ConnectionFailed.new(error_msg)
+      allow_any_instance_of(Faraday::Connection).to receive(:post).and_raise(connection_error)
+
+      # Should raise a ConnectionError
+      expect do
+        server.send(:send_jsonrpc_request, { id: 1, jsonrpc: '2.0', method: 'test' })
+      end.to raise_error(MCPClient::Errors::ConnectionError, /Server connection lost/)
+    end
+
+    it 'propagates connection errors from call_tool' do
+      # Setup - ensure the server appears initialized and connected
+      server.instance_variable_set(:@initialized, true)
+      server.instance_variable_set(:@connection_established, true)
+      server.instance_variable_set(:@sse_connected, true)
+
+      # Also disable reconnect attempts
+      allow(server).to receive(:connect).and_return(true)
+
+      # Simulate connection error in the send_jsonrpc_request method
+      allow(server).to receive(:send_jsonrpc_request).and_raise(
+        MCPClient::Errors::ConnectionError.new('Server connection lost: Connection refused')
+      )
+
+      # Should preserve the ConnectionError
+      expect do
+        server.call_tool('TestTool', {})
+      end.to raise_error(MCPClient::Errors::ConnectionError, /Server connection lost/)
+    end
+  end
   let(:tool_data) do
     {
       'name' => 'test_tool',
@@ -321,13 +359,28 @@ RSpec.describe MCPClient::ServerSSE do
     end
 
     it 'connects if not already connected' do
+      # Reset connection state for this test
+      server.instance_variable_set(:@connection_established, false)
+      server.instance_variable_set(:@sse_connected, false)
+
+      # Expect connect to be called
       expect(server).to receive(:connect) do
         server.instance_variable_set(:@connection_established, true)
+        server.instance_variable_set(:@sse_connected, true)
       end
+
+      # Set up for post-connection success
+      allow(server).to receive(:send_jsonrpc_request).and_return(result)
+
+      # Call the tool
       server.call_tool(tool_name, parameters)
     end
 
     it 'makes a POST request with the tool name and parameters' do
+      # Ensure connection is established
+      server.instance_variable_set(:@connection_established, true)
+      server.instance_variable_set(:@sse_connected, true)
+
       response = server.call_tool(tool_name, parameters)
       expect(response).to eq(result)
     end

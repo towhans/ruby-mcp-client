@@ -28,7 +28,7 @@ module MCPClient
       @pending = {}
       @initialized = false
       @logger = logger || Logger.new($stdout, level: Logger::WARN)
-      @logger.progname = name ? "#{self.class.name}[#{name}]" : self.class.name
+      @logger.progname = self.class.name
       @logger.formatter = proc { |severity, _datetime, progname, msg| "#{severity} [#{progname}] #{msg}\n" }
       @max_retries = retries
       @retry_backoff = retry_backoff
