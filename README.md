@@ -57,14 +57,18 @@ client = MCPClient.create_client(
       ping: 10,         # Optional ping interval in seconds of inactivity (default: 10)
                         # Connection closes automatically after inactivity (2.5x ping interval)
       retries: 3,       # Optional number of retry attempts (default: 0)
-      retry_backoff: 1  # Optional backoff delay in seconds (default: 1)
+      retry_backoff: 1, # Optional backoff delay in seconds (default: 1)
       # Native support for tool streaming via call_tool_streaming method
-)  ]
+      logger: Logger.new($stdout, level: Logger::INFO) # Optional logger for this server
+)  ],
+  # Optional logger for the client and all servers without explicit loggers
+  logger: Logger.new($stdout, level: Logger::WARN)
 )
 
 # Or load server definitions from a JSON file
 client = MCPClient.create_client(
-  server_definition_file: 'path/to/server_definition.json'
+  server_definition_file: 'path/to/server_definition.json',
+  logger: Logger.new($stdout, level: Logger::WARN) # Optional logger for client and servers
 )
 
 # MCP server configuration JSON format can be:

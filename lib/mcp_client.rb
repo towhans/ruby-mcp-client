@@ -28,17 +28,17 @@ module MCPClient
     # Load additional configs from a JSON file if specified
     if server_definition_file
       # Parse JSON definitions into clean config hashes
-      parser = MCPClient::ConfigParser.new(server_definition_file)
+      parser = MCPClient::ConfigParser.new(server_definition_file, logger: logger)
       parsed = parser.parse
       parsed.each_value do |cfg|
         case cfg[:type].to_s
         when 'stdio'
           # Build command list with args
           cmd_list = [cfg[:command]] + Array(cfg[:args])
-          configs << MCPClient.stdio_config(command: cmd_list)
+          configs << MCPClient.stdio_config(command: cmd_list, logger: logger)
         when 'sse'
           # Use 'url' from parsed config as 'base_url' for SSE config
-          configs << MCPClient.sse_config(base_url: cfg[:url], headers: cfg[:headers] || {})
+          configs << MCPClient.sse_config(base_url: cfg[:url], headers: cfg[:headers] || {}, logger: logger)
         end
       end
     end
@@ -47,11 +47,13 @@ module MCPClient
 
   # Create a standard server configuration for stdio
   # @param command [String, Array<String>] command to execute
+  # @param logger [Logger, nil] optional logger for server operations
   # @return [Hash] server configuration
-  def self.stdio_config(command:)
+  def self.stdio_config(command:, logger: nil)
     {
       type: 'stdio',
-      command: command
+      command: command,
+      logger: logger
     }
   end
 
@@ -62,8 +64,9 @@ module MCPClient
   # @param ping [Integer] time in seconds after which to send ping if no activity (default: 10)
   # @param retries [Integer] number of retry attempts (default: 0)
   # @param retry_backoff [Integer] backoff delay in seconds (default: 1)
+  # @param logger [Logger, nil] optional logger for server operations
   # @return [Hash] server configuration
-  def self.sse_config(base_url:, headers: {}, read_timeout: 30, ping: 10, retries: 0, retry_backoff: 1)
+  def self.sse_config(base_url:, headers: {}, read_timeout: 30, ping: 10, retries: 0, retry_backoff: 1, logger: nil)
     {
       type: 'sse',
       base_url: base_url,
@@ -71,7 +74,8 @@ module MCPClient
       read_timeout: read_timeout,
       ping: ping,
       retries: retries,
-      retry_backoff: retry_backoff
+      retry_backoff: retry_backoff,
+      logger: logger
     }
   end
 end

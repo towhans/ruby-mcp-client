@@ -27,6 +27,19 @@ RSpec.describe MCPClient::Client do
       client = described_class.new
       expect(client.tool_cache).to be_empty
     end
+
+    it 'passes logger to ServerFactory' do
+      custom_logger = Logger.new(StringIO.new)
+      expect(MCPClient::ServerFactory).to receive(:create).with(
+        { type: 'stdio', command: 'test' },
+        logger: custom_logger
+      )
+
+      described_class.new(
+        mcp_server_configs: [{ type: 'stdio', command: 'test' }],
+        logger: custom_logger
+      )
+    end
   end
 
   describe '#list_tools' do

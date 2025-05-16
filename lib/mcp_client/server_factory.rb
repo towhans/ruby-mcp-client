@@ -5,8 +5,9 @@ module MCPClient
   class ServerFactory
     # Create a server instance based on configuration
     # @param config [Hash] server configuration
+    # @param logger [Logger, nil] optional logger to use for the server
     # @return [MCPClient::ServerBase] server instance
-    def self.create(config)
+    def self.create(config, logger: nil)
       case config[:type]
       when 'stdio'
         MCPClient::ServerStdio.new(
@@ -14,7 +15,7 @@ module MCPClient
           retries: config[:retries] || 0,
           retry_backoff: config[:retry_backoff] || 1,
           read_timeout: config[:read_timeout] || MCPClient::ServerStdio::READ_TIMEOUT,
-          logger: config[:logger]
+          logger: config[:logger] || logger
         )
       when 'sse'
         MCPClient::ServerSSE.new(
@@ -24,7 +25,7 @@ module MCPClient
           ping: config[:ping] || 10,
           retries: config[:retries] || 0,
           retry_backoff: config[:retry_backoff] || 1,
-          logger: config[:logger]
+          logger: config[:logger] || logger
         )
       else
         raise ArgumentError, "Unknown server type: #{config[:type]}"

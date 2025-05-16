@@ -49,7 +49,7 @@ RSpec.describe MCPClient do
     it 'builds a stdio server config hash' do
       cmd = 'echo hi'
       cfg = MCPClient.stdio_config(command: cmd)
-      expect(cfg).to eq(type: 'stdio', command: cmd)
+      expect(cfg).to eq(type: 'stdio', command: cmd, logger: nil)
     end
   end
 
@@ -59,7 +59,7 @@ RSpec.describe MCPClient do
       headers = { 'Authorization' => 'Bearer token' }
       cfg = MCPClient.sse_config(base_url: url, headers: headers)
       expect(cfg).to eq(type: 'sse', base_url: url, headers: headers, read_timeout: 30, ping: 10, retries: 0,
-                        retry_backoff: 1)
+                        retry_backoff: 1, logger: nil)
     end
   end
 end

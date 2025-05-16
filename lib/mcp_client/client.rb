@@ -23,7 +23,7 @@ module MCPClient
       @logger.formatter = proc { |severity, _datetime, progname, msg| "#{severity} [#{progname}] #{msg}\n" }
       @servers = mcp_server_configs.map do |config|
         @logger.debug("Creating server with config: #{config.inspect}")
-        MCPClient::ServerFactory.create(config)
+        MCPClient::ServerFactory.create(config, logger: @logger)
       end
       @tool_cache = {}
       # JSON-RPC notification listeners

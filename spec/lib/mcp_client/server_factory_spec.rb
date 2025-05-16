@@ -13,6 +13,12 @@ RSpec.describe MCPClient::ServerFactory do
         expect(server).to be_a(MCPClient::ServerStdio)
         expect(server.command).to eq(command)
       end
+
+      it 'propagates the logger to the server' do
+        custom_logger = Logger.new(StringIO.new)
+        server = described_class.create(config, logger: custom_logger)
+        expect(server.instance_variable_get(:@logger)).to eq(custom_logger)
+      end
     end
 
     context 'with sse config' do
@@ -24,6 +30,23 @@ RSpec.describe MCPClient::ServerFactory do
         server = described_class.create(config)
         expect(server).to be_a(MCPClient::ServerSSE)
         expect(server.base_url).to eq('https://example.com/mcp')
+      end
+
+      it 'propagates the logger to the server' do
+        custom_logger = Logger.new(StringIO.new)
+        server = described_class.create(config, logger: custom_logger)
+        expect(server.instance_variable_get(:@logger)).to eq(custom_logger)
+      end
+    end
+
+    context 'with config that includes logger' do
+      let(:custom_logger) { Logger.new(StringIO.new) }
+      let(:config) { { type: 'stdio', command: 'test', logger: custom_logger } }
+
+      it 'uses the logger from config over the factory logger' do
+        factory_logger = Logger.new(StringIO.new)
+        server = described_class.create(config, logger: factory_logger)
+        expect(server.instance_variable_get(:@logger)).to eq(custom_logger)
       end
     end
 
