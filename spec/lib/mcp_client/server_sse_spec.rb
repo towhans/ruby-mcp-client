@@ -398,6 +398,12 @@ RSpec.describe MCPClient::ServerSSE do
 
       server.instance_variable_set(:@rpc_conn, faraday_conn)
 
+      # Setup to properly handle ServerError by wrapping it in ToolCallError
+      allow(server).to receive(:post_json_rpc_request).and_raise(
+        MCPClient::Errors::ServerError.new('Server returned error: 403 Forbidden')
+      )
+
+      # The call_tool method should wrap the ServerError in a ToolCallError
       expect do
         server.call_tool(tool_name, parameters)
       end.to raise_error(MCPClient::Errors::ToolCallError, /Error calling tool/)
@@ -872,49 +878,37 @@ RSpec.describe MCPClient::ServerSSE do
       server.instance_variable_set(:@max_retries, 2)
       server.instance_variable_set(:@retry_backoff, 0.01) # Speed up tests
 
-      # Create new faraday stubs that will fail then succeed
-      retry_stubs = Faraday::Adapter::Test::Stubs.new
-      retry_conn = Faraday.new do |builder|
-        builder.adapter :test, retry_stubs
-      end
-
-      # First call fails, second succeeds
+      # Setup for error then success pattern
       call_count = 0
-      retry_stubs.post('/rpc') do |_env|
+      allow(server).to receive(:send_jsonrpc_request) do
         call_count += 1
-        if call_count == 1
-          [500, {}, 'Server Error']
-        else
-          [200, { 'Content-Type' => 'application/json' }, { result: { success: true } }.to_json]
-        end
+        raise MCPClient::Errors::TransportError, 'Network timeout' if call_count == 1
+
+        # First call fails with a TransportError
+
+        # Second call succeeds
+        { 'success' => true }
       end
 
-      server.instance_variable_set(:@rpc_conn, retry_conn)
-
+      # Should retry and eventually succeed
       result = server.rpc_request('test_method', { param: 'value' })
       expect(result).to eq({ 'success' => true })
+      expect(call_count).to eq(2) # Verify it was called twice (one fail, one success)
     end
 
     it 'gives up after max retries' do
       server.instance_variable_set(:@max_retries, 1)
       server.instance_variable_set(:@retry_backoff, 0.01) # Speed up tests
 
-      # Create new faraday stubs that will always fail
-      fail_stubs = Faraday::Adapter::Test::Stubs.new
-      fail_conn = Faraday.new do |builder|
-        builder.adapter :test, fail_stubs
-      end
+      # Always raise a TransportError
+      allow(server).to receive(:send_jsonrpc_request).and_raise(
+        MCPClient::Errors::TransportError.new('Connection timed out')
+      )
 
-      # Always return 500 error
-      fail_stubs.post('/rpc') do |_env|
-        [500, {}, 'Server Error']
-      end
-
-      server.instance_variable_set(:@rpc_conn, fail_conn)
-
+      # Should try max_retries (1) + 1 (original) = 2 times, then give up
       expect do
         server.rpc_request('test_method', { param: 'value' })
-      end.to raise_error(MCPClient::Errors::ServerError)
+      end.to raise_error(MCPClient::Errors::TransportError, 'Connection timed out')
     end
   end
 

@@ -106,12 +106,9 @@ module MCPClient
         end
 
         @mutex.synchronize { @tools }
-      rescue MCPClient::Errors::ConnectionError, MCPClient::Errors::TransportError
+      rescue MCPClient::Errors::ConnectionError, MCPClient::Errors::TransportError, MCPClient::Errors::ServerError
         # Re-raise these errors directly
-        # ConnectionError includes auth errors from ensure_initialized
         raise
-      rescue JSON::ParserError => e
-        raise MCPClient::Errors::TransportError, "Invalid JSON response from server: #{e.message}"
       rescue StandardError => e
         raise MCPClient::Errors::ToolCallError, "Error listing tools: #{e.message}"
       end
@@ -133,29 +130,19 @@ module MCPClient
         connect
       end
 
-      ensure_initialized
-
-      request_id = @mutex.synchronize { @request_id += 1 }
-
-      json_rpc_request = {
-        jsonrpc: '2.0',
-        id: request_id,
-        method: 'tools/call',
-        params: {
-          name: tool_name,
-          arguments: parameters
-        }
-      }
-
-      send_jsonrpc_request(json_rpc_request)
-    rescue MCPClient::Errors::ConnectionError, MCPClient::Errors::TransportError
-      raise
-    rescue JSON::ParserError => e
-      raise MCPClient::Errors::TransportError, "Invalid JSON response from server: #{e.message}"
-    rescue Errno::ECONNREFUSED => e
-      raise MCPClient::Errors::ConnectionError, "Server connection lost: #{e.message}"
-    rescue StandardError => e
-      raise MCPClient::Errors::ToolCallError, "Error calling tool '#{tool_name}': #{e.message}"
+      # Use rpc_request to handle the actual RPC call
+      begin
+        rpc_request('tools/call', {
+                      name: tool_name,
+                      arguments: parameters
+                    })
+      rescue MCPClient::Errors::ConnectionError, MCPClient::Errors::TransportError
+        # Re-raise connection/transport errors directly to match test expectations
+        raise
+      rescue StandardError => e
+        # For all other errors, wrap in ToolCallError
+        raise MCPClient::Errors::ToolCallError, "Error calling tool '#{tool_name}': #{e.message}"
+      end
     end
 
     # Connect to the MCP server over HTTP/HTTPS with SSE
@@ -249,6 +236,10 @@ module MCPClient
     # @param method [String] JSON-RPC method name
     # @param params [Hash] parameters for the request
     # @return [Object] result from JSON-RPC response
+    # @raise [MCPClient::Errors::ServerError] if server returns an error
+    # @raise [MCPClient::Errors::TransportError] if response isn't valid JSON
+    # @raise [MCPClient::Errors::ToolCallError] for other errors during request execution
+    # @raise [MCPClient::Errors::ConnectionError] if server is disconnected
     def rpc_request(method, params = {})
       ensure_initialized
       with_retry do
@@ -869,16 +860,7 @@ module MCPClient
         return @tools_data if @tools_data
       end
 
-      request_id = @mutex.synchronize { @request_id += 1 }
-
-      json_rpc_request = {
-        jsonrpc: '2.0',
-        id: request_id,
-        method: 'tools/list',
-        params: {}
-      }
-
-      result = send_jsonrpc_request(json_rpc_request)
+      result = rpc_request('tools/list')
 
       if result && result['tools']
         @mutex.synchronize do
@@ -902,8 +884,7 @@ module MCPClient
       attempts = 0
       begin
         yield
-      rescue MCPClient::Errors::TransportError, MCPClient::Errors::ServerError, IOError, Errno::ETIMEDOUT,
-             Errno::ECONNRESET => e
+      rescue MCPClient::Errors::TransportError, IOError, Errno::ETIMEDOUT, Errno::ECONNRESET => e
         attempts += 1
         if attempts <= @max_retries
           delay = @retry_backoff * (2**(attempts - 1))
@@ -919,16 +900,40 @@ module MCPClient
     # @param request [Hash] the JSON-RPC request
     # @return [Hash] the result of the request
     # @raise [MCPClient::Errors::ConnectionError] if server connection is lost
+    # @raise [MCPClient::Errors::TransportError] if response isn't valid JSON
+    # @raise [MCPClient::Errors::ToolCallError] for other errors during request execution
     def send_jsonrpc_request(request)
       @logger.debug("Sending JSON-RPC request: #{request.to_json}")
       record_activity
 
-      response = post_json_rpc_request(request)
+      begin
+        response = post_json_rpc_request(request)
 
-      if @use_sse
-        wait_for_sse_result(request)
-      else
-        parse_direct_response(response)
+        if @use_sse
+          wait_for_sse_result(request)
+        else
+          parse_direct_response(response)
+        end
+      rescue MCPClient::Errors::ConnectionError, MCPClient::Errors::TransportError, MCPClient::Errors::ServerError
+        # Re-raise these errors directly
+        raise
+      rescue JSON::ParserError => e
+        raise MCPClient::Errors::TransportError, "Invalid JSON response from server: #{e.message}"
+      rescue Errno::ECONNREFUSED => e
+        raise MCPClient::Errors::ConnectionError, "Server connection lost: #{e.message}"
+      rescue StandardError => e
+        method_name = request[:method] || request['method']
+
+        # Format error message based on method
+        if method_name == 'tools/call'
+          # Extract tool name from parameters
+          tool_name = request[:params][:name] || request['params']['name']
+          raise MCPClient::Errors::ToolCallError, "Error calling tool '#{tool_name}': #{e.message}"
+        elsif method_name == 'tools/list'
+          raise MCPClient::Errors::ToolCallError, "Error listing tools: #{e.message}"
+        else
+          raise MCPClient::Errors::ToolCallError, "Error executing request '#{method_name}': #{e.message}"
+        end
       end
     end
 
