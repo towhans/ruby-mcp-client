@@ -63,7 +63,7 @@ module MCPClient
           id: request_id,
           method: 'initialize',
           params: {
-            'protocolVersion' => MCPClient::VERSION,
+          'protocolVersion' => MCPClient::PROTOCOL_VERSION,
             'capabilities' => {},
             'clientInfo' => { 'name' => 'ruby-mcp-client', 'version' => MCPClient::VERSION }
           }

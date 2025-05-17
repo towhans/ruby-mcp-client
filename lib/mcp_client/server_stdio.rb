@@ -162,12 +162,12 @@ module MCPClient
     def perform_initialize
       # Initialize request
       init_id = next_id
-      init_req = {
+        init_req = {
         'jsonrpc' => '2.0',
         'id' => init_id,
         'method' => 'initialize',
         'params' => {
-          'protocolVersion' => '2024-11-05',
+          'protocolVersion' => MCPClient::PROTOCOL_VERSION,
           'capabilities' => {},
           'clientInfo' => { 'name' => 'ruby-mcp-client', 'version' => MCPClient::VERSION }
         }
