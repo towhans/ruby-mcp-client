@@ -1,6 +1,9 @@
 # frozen_string_literal: true
 
-require 'bundler/setup'
+begin
+  require 'bundler/setup'
+rescue LoadError
+end
 require 'rspec'
 $LOAD_PATH.unshift File.expand_path('../lib', __dir__)
 require 'mcp_client'
