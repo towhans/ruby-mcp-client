@@ -154,8 +154,5 @@ module MCPClient
     ensure
       @stdin = @stdout = @stderr = @wait_thread = @reader_thread = nil
     end
-
-    private
-
   end
 end

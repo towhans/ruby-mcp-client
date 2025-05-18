@@ -8,7 +8,8 @@ RSpec.describe MCPClient::ServerSSE::JsonRpcTransport do
     Class.new do
       include MCPClient::ServerSSE::JsonRpcTransport
 
-      attr_accessor :headers, :logger, :base_url, :rpc_endpoint, :rpc_conn, :read_timeout, :max_retries, :retry_backoff, :use_sse
+      attr_accessor :headers, :logger, :base_url, :rpc_endpoint, :rpc_conn, :read_timeout, :max_retries,
+                    :retry_backoff, :use_sse
 
       def initialize
         @headers = {}
@@ -22,7 +23,7 @@ RSpec.describe MCPClient::ServerSSE::JsonRpcTransport do
       end
 
       def record_activity; end
-      def connection_active?; true; end
+      def connection_active? = true
       def cleanup; end
       def connect; end
       def perform_initialize; end
@@ -45,14 +46,14 @@ RSpec.describe MCPClient::ServerSSE::JsonRpcTransport do
         expect(req.headers['Accept']).to eq('application/json')
       end.and_return(resp)
 
-      expect(transport.send(:send_http_request, conn, '/rpc', {foo: 'bar'})).to eq(resp)
+      expect(transport.send(:send_http_request, conn, '/rpc', { foo: 'bar' })).to eq(resp)
     end
 
     it 'logs without body when response has no body method' do
       resp = instance_double(Faraday::Response, status: 202, success?: true)
       allow(transport.logger).to receive(:debug)
       allow(conn).to receive(:post).and_return(resp)
-      transport.send(:send_http_request, conn, '/rpc', {foo: 'bar'})
+      transport.send(:send_http_request, conn, '/rpc', { foo: 'bar' })
       expect(transport.logger).to have_received(:debug).with('Received JSON-RPC response: 202')
     end
   end
@@ -62,7 +63,9 @@ RSpec.describe MCPClient::ServerSSE::JsonRpcTransport do
 
     it 'wraps server and connection errors in TransportError' do
       allow(transport).to receive(:post_json_rpc_request).and_raise(Faraday::ConnectionFailed.new('fail'))
-      expect { transport.rpc_notify('m', {}) }.to raise_error(MCPClient::Errors::TransportError, /Failed to send notification/)
+      expect do
+        transport.rpc_notify('m', {})
+      end.to raise_error(MCPClient::Errors::TransportError, /Failed to send notification/)
     end
   end
 
@@ -81,7 +84,7 @@ RSpec.describe MCPClient::ServerSSE::JsonRpcTransport do
   describe '#check_for_result' do
     it 'returns and deletes available result' do
       transport.instance_variable_set(:@mutex, Mutex.new)
-      transport.instance_variable_set(:@sse_results, {1 => 'v'})
+      transport.instance_variable_set(:@sse_results, { 1 => 'v' })
       expect(transport.send(:check_for_result, 1)).to eq('v')
       expect(transport.instance_variable_get(:@sse_results)).to be_empty
     end

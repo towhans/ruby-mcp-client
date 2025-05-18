@@ -16,14 +16,17 @@ RSpec.describe MCPClient::ServerSSE::SseParser do
         def cv.broadcast; end
         @connection_cv = cv
         @logger = Logger.new(StringIO.new)
-        @notification_callback = proc { |m, p| @notification_calls ||= []; @notification_calls << [m, p] }
+        @notification_callback = proc { |m, p|
+          @notification_calls ||= []
+          @notification_calls << [m, p]
+        }
         @sse_results = {}
         @tools_data = nil
       end
 
       def record_activity; end
 
-      def authorization_error?(_msg, _code); false; end
+      def authorization_error?(_msg, _code) = false
 
       def handle_sse_auth_error_message(_msg); end
     end
@@ -65,7 +68,7 @@ RSpec.describe MCPClient::ServerSSE::SseParser do
       notification = { method: 'n', params: { 'a' => 1 } }
       raw = "event: message\ndata: #{notification.to_json}\n\n"
       parser.parse_and_handle_sse_event(raw)
-      expect(parser.notification_calls).to eq([['n', {'a' => 1}]])
+      expect(parser.notification_calls).to eq([['n', { 'a' => 1 }]])
     end
   end
 end

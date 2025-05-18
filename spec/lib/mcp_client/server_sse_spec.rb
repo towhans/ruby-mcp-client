@@ -233,6 +233,8 @@ RSpec.describe MCPClient::ServerSSE do
       end
       # Disable SSE transport for testing synchronous HTTP fallback
       server.instance_variable_set(:@use_sse, false)
+      # Prevent RPC request from triggering SSE reconnect logic
+      server.instance_variable_set(:@sse_connected, true)
 
       # Create a Faraday connection stub to avoid real HTTP requests
       faraday_stubs = Faraday::Adapter::Test::Stubs.new
@@ -289,20 +291,20 @@ RSpec.describe MCPClient::ServerSSE do
       expect(server.tools.first).to be_a(MCPClient::Tool)
     end
 
-    it 'raises ToolCallError on non-success response' do
+    it 'raises ServerError on non-success response' do
       # Create error response stub
       faraday_stubs = Faraday::Adapter::Test::Stubs.new
       faraday_conn = Faraday.new do |builder|
         builder.adapter :test, faraday_stubs
       end
 
-      faraday_stubs.post('/messages') do |_env|
+      faraday_stubs.post('/rpc') do |_env|
         [500, {}, 'Server Error']
       end
 
       server.instance_variable_set(:@rpc_conn, faraday_conn)
 
-      expect { server.list_tools }.to raise_error(MCPClient::Errors::ToolCallError, /Error listing tools/)
+      expect { server.list_tools }.to raise_error(MCPClient::Errors::ServerError, /Server returned error/)
     end
 
     it 'raises TransportError on invalid JSON' do
@@ -333,6 +335,7 @@ RSpec.describe MCPClient::ServerSSE do
       allow(server).to receive(:perform_initialize) do
         server.instance_variable_set(:@initialized, true)
       end
+      allow(server).to receive(:cleanup)
       # Disable SSE transport for testing synchronous HTTP fallback
       server.instance_variable_set(:@use_sse, false)
 
@@ -848,6 +851,7 @@ RSpec.describe MCPClient::ServerSSE do
       allow(server).to receive(:perform_initialize) do
         server.instance_variable_set(:@initialized, true)
       end
+      allow(server).to receive(:cleanup)
       server.instance_variable_set(:@use_sse, false)
 
       # Create a Faraday connection stub to avoid real HTTP requests

@@ -8,11 +8,16 @@ module MCPClient
       # @param method [String] JSON-RPC method name
       # @param params [Hash] parameters for the request
       # @return [Object] result from JSON-RPC response
+      # @raise [MCPClient::Errors::ConnectionError] if connection is not active or reconnect fails
       # @raise [MCPClient::Errors::ServerError] if server returns an error
       # @raise [MCPClient::Errors::TransportError] if response isn't valid JSON
       # @raise [MCPClient::Errors::ToolCallError] for other errors during request execution
-      # @raise [MCPClient::Errors::ConnectionError] if server is disconnected
       def rpc_request(method, params = {})
+        if !@connection_established || !@sse_connected
+          @logger.debug('Connection not active, attempting to reconnect before RPC request')
+          cleanup
+          connect
+        end
         ensure_initialized
 
         with_retry do
@@ -63,7 +68,7 @@ module MCPClient
           id: request_id,
           method: 'initialize',
           params: {
-          'protocolVersion' => MCPClient::PROTOCOL_VERSION,
+            'protocolVersion' => MCPClient::PROTOCOL_VERSION,
             'capabilities' => {},
             'clientInfo' => { 'name' => 'ruby-mcp-client', 'version' => MCPClient::VERSION }
           }
@@ -121,15 +126,7 @@ module MCPClient
           raise MCPClient::Errors::ConnectionError, "Server connection lost: #{e.message}"
         rescue StandardError => e
           method_name = request[:method] || request['method']
-
-          if method_name == 'tools/call'
-            tool_name = request[:params][:name] || request['params']['name']
-            raise MCPClient::Errors::ToolCallError, "Error calling tool '#{tool_name}': #{e.message}"
-          elsif method_name == 'tools/list'
-            raise MCPClient::Errors::ToolCallError, "Error listing tools: #{e.message}"
-          else
-            raise MCPClient::Errors::ToolCallError, "Error executing request '#{method_name}': #{e.message}"
-          end
+          raise MCPClient::Errors::ToolCallError, "Error executing request '#{method_name}': #{e.message}"
         end
       end
 

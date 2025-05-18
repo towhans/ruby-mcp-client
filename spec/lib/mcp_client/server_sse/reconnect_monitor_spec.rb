@@ -16,7 +16,7 @@ RSpec.describe MCPClient::ServerSSE::ReconnectMonitor do
       def initialize
         @mutex = Mutex.new
         cv = Object.new
-        def cv.wait(_timeout = nil); true; end
+        def wait(_timeout = nil) = true
         def cv.broadcast; end
         @connection_cv = cv
         @logger = Logger.new(StringIO.new)

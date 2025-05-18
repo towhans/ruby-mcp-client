@@ -2,7 +2,8 @@
 
 begin
   require 'bundler/setup'
-rescue LoadError
+rescue LoadError => e
+  puts "Bundler setup failed: #{e.message}"
 end
 require 'rspec'
 $LOAD_PATH.unshift File.expand_path('../lib', __dir__)

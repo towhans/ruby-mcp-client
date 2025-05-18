@@ -36,6 +36,9 @@ Metrics/PerceivedComplexity:
 Metrics/ParameterLists:
   Max: 8
 
+Metrics/ModuleLength:
+  Max: 500
+
 Gemspec/DevelopmentDependencies:
   Enabled: false
 

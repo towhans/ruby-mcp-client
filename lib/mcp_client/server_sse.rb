@@ -131,26 +131,16 @@ module MCPClient
     # @raise [MCPClient::Errors::ToolCallError] for other errors during tool execution
     # @raise [MCPClient::Errors::ConnectionError] if server is disconnected
     def call_tool(tool_name, parameters)
-      if !@connection_established || !@sse_connected
-        # Try to reconnect
-        @logger.debug('Connection not active, attempting to reconnect before tool call')
-        cleanup
-        connect
-      end
-
-      # Use rpc_request to handle the actual RPC call
-      begin
-        rpc_request('tools/call', {
-                      name: tool_name,
-                      arguments: parameters
-                    })
-      rescue MCPClient::Errors::ConnectionError, MCPClient::Errors::TransportError
-        # Re-raise connection/transport errors directly to match test expectations
-        raise
-      rescue StandardError => e
-        # For all other errors, wrap in ToolCallError
-        raise MCPClient::Errors::ToolCallError, "Error calling tool '#{tool_name}': #{e.message}"
-      end
+      rpc_request('tools/call', {
+                    name: tool_name,
+                    arguments: parameters
+                  })
+    rescue MCPClient::Errors::ConnectionError, MCPClient::Errors::TransportError
+      # Re-raise connection/transport errors directly to match test expectations
+      raise
+    rescue StandardError => e
+      # For all other errors, wrap in ToolCallError
+      raise MCPClient::Errors::ToolCallError, "Error calling tool '#{tool_name}': #{e.message}"
     end
 
     # Connect to the MCP server over HTTP/HTTPS with SSE
@@ -241,7 +231,6 @@ module MCPClient
     end
 
     private
-
 
     # Start the SSE thread to listen for events
     # This thread handles the long-lived Server-Sent Events connection
@@ -426,6 +415,5 @@ module MCPClient
 
       raise MCPClient::Errors::ToolCallError, 'Failed to get tools list from JSON-RPC request'
     end
-
   end
 end
