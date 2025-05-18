@@ -13,7 +13,7 @@ module MCPClient
     include JsonRpcTransport
 
     # @!attribute [r] command
-    #   @return [String] the command used to launch the server
+    #   @return [String, Array] the command used to launch the server
     # @!attribute [r] env
     #   @return [Hash] environment variables for the subprocess
     attr_reader :command, :env
@@ -23,6 +23,7 @@ module MCPClient
 
     # Initialize a new ServerStdio instance
     # @param command [String, Array] the stdio command to launch the MCP JSON-RPC server
+    #   For improved security, passing an Array is recommended to avoid shell injection issues
     # @param retries [Integer] number of retry attempts on transient errors
     # @param retry_backoff [Numeric] base delay in seconds for exponential backoff
     # @param read_timeout [Numeric] timeout in seconds for reading responses
@@ -31,6 +32,7 @@ module MCPClient
     # @param env [Hash] optional environment variables for the subprocess
     def initialize(command:, retries: 0, retry_backoff: 1, read_timeout: READ_TIMEOUT, name: nil, logger: nil, env: {})
       super(name: name)
+      @command_array = command.is_a?(Array) ? command : nil
       @command = command.is_a?(Array) ? command.join(' ') : command
       @mutex = Mutex.new
       @cond = ConditionVariable.new
@@ -50,10 +52,18 @@ module MCPClient
     # @return [Boolean] true if connection was successful
     # @raise [MCPClient::Errors::ConnectionError] if connection fails
     def connect
-      if @env.any?
-        @stdin, @stdout, @stderr, @wait_thread = Open3.popen3(@env, @command)
+      if @command_array
+        if @env.any?
+          @stdin, @stdout, @stderr, @wait_thread = Open3.popen3(@env, *@command_array)
+        else
+          @stdin, @stdout, @stderr, @wait_thread = Open3.popen3(*@command_array)
+        end
       else
-        @stdin, @stdout, @stderr, @wait_thread = Open3.popen3(@command)
+        if @env.any?
+          @stdin, @stdout, @stderr, @wait_thread = Open3.popen3(@env, @command)
+        else
+          @stdin, @stdout, @stderr, @wait_thread = Open3.popen3(@command)
+        end
       end
       true
     rescue StandardError => e
