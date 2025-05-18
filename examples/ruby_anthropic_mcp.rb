@@ -15,9 +15,10 @@ logger = Logger.new($stdout)
 logger.level = Logger::WARN
 mcp_client = MCPClient::Client.new(
   mcp_server_configs: [
-    # Example with stdio configuration
+    # Example with stdio configuration (pass custom environment variables)
     MCPClient.stdio_config(
-      command: %W[npx -y @modelcontextprotocol/server-filesystem #{Dir.pwd}]
+      command: %W[npx -y @modelcontextprotocol/server-filesystem #{Dir.pwd}],
+      env: { 'EXAMPLE_ENV_VAR' => 'example_value' }
     )
     # Example with SSE configuration (commented out - uncomment to use)
     # MCPClient.sse_config(
@@ -29,6 +30,10 @@ mcp_client = MCPClient::Client.new(
   ],
   logger: logger
 )
+
+# Verify that the EXAMPLE_ENV_VAR was forwarded to the stdio server
+stdio_server = mcp_client.servers.first
+puts "STDIO server env EXAMPLE_ENV_VAR: #{stdio_server.env['EXAMPLE_ENV_VAR']}"
 
 # Initialize the Anthropic client
 client = Anthropic::Client.new(access_token: api_key)

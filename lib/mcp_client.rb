@@ -33,9 +33,14 @@ module MCPClient
       parsed.each_value do |cfg|
         case cfg[:type].to_s
         when 'stdio'
-          # Build command list with args
+          # Build command list with args and propagate environment
           cmd_list = [cfg[:command]] + Array(cfg[:args])
-          configs << MCPClient.stdio_config(command: cmd_list, name: cfg[:name], logger: logger)
+          configs << MCPClient.stdio_config(
+            command: cmd_list,
+            name: cfg[:name],
+            logger: logger,
+            env: cfg[:env]
+          )
         when 'sse'
           # Use 'url' from parsed config as 'base_url' for SSE config
           configs << MCPClient.sse_config(base_url: cfg[:url], headers: cfg[:headers] || {}, name: cfg[:name],
@@ -51,12 +56,13 @@ module MCPClient
   # @param name [String, nil] optional name for this server
   # @param logger [Logger, nil] optional logger for server operations
   # @return [Hash] server configuration
-  def self.stdio_config(command:, name: nil, logger: nil)
+  def self.stdio_config(command:, name: nil, logger: nil, env: {})
     {
       type: 'stdio',
       command: command,
       name: name,
-      logger: logger
+      logger: logger,
+      env: env || {}
     }
   end
 

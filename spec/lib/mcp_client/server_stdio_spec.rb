@@ -23,6 +23,13 @@ RSpec.describe MCPClient::ServerStdio do
       expect(server.connect).to be true
     end
 
+    it 'passes environment variables when env is provided' do
+      env = { 'FOO' => 'bar' }
+      server_env = described_class.new(command: command, env: env)
+      expect(Open3).to receive(:popen3).with(env, command).and_return([double, double, double, double])
+      expect(server_env.connect).to be true
+    end
+
     it 'raises ConnectionError on failure' do
       allow(Open3).to receive(:popen3).and_raise(StandardError.new('Failed to start process'))
       expect { server.connect }.to raise_error(MCPClient::Errors::ConnectionError, /Failed to connect to MCP server/)

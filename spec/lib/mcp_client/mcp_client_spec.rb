@@ -49,7 +49,13 @@ RSpec.describe MCPClient do
     it 'builds a stdio server config hash' do
       cmd = 'echo hi'
       cfg = MCPClient.stdio_config(command: cmd)
-      expect(cfg).to eq(type: 'stdio', command: cmd, name: nil, logger: nil)
+      expect(cfg).to eq(
+        type: 'stdio',
+        command: cmd,
+        name: nil,
+        logger: nil,
+        env: {}
+      )
     end
   end
 

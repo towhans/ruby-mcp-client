@@ -16,7 +16,8 @@ module MCPClient
           retry_backoff: config[:retry_backoff] || 1,
           read_timeout: config[:read_timeout] || MCPClient::ServerStdio::READ_TIMEOUT,
           name: config[:name],
-          logger: config[:logger] || logger
+          logger: config[:logger] || logger,
+          env: config[:env] || {}
         )
       when 'sse'
         MCPClient::ServerSSE.new(

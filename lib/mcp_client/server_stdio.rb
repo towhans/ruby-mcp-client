@@ -8,7 +8,7 @@ require 'logger'
 module MCPClient
   # JSON-RPC implementation of MCP server over stdio.
   class ServerStdio < ServerBase
-    attr_reader :command
+    attr_reader :command, :env
 
     # Timeout in seconds for responses
     READ_TIMEOUT = 15
@@ -19,7 +19,8 @@ module MCPClient
     # @param read_timeout [Numeric] timeout in seconds for reading responses
     # @param name [String, nil] optional name for this server
     # @param logger [Logger, nil] optional logger
-    def initialize(command:, retries: 0, retry_backoff: 1, read_timeout: READ_TIMEOUT, name: nil, logger: nil)
+    # @param env [Hash] optional environment variables for the subprocess
+    def initialize(command:, retries: 0, retry_backoff: 1, read_timeout: READ_TIMEOUT, name: nil, logger: nil, env: {})
       super(name: name)
       @command = command.is_a?(Array) ? command.join(' ') : command
       @mutex = Mutex.new
@@ -30,16 +31,21 @@ module MCPClient
       @logger = logger || Logger.new($stdout, level: Logger::WARN)
       @logger.progname = self.class.name
       @logger.formatter = proc { |severity, _datetime, progname, msg| "#{severity} [#{progname}] #{msg}\n" }
-      @max_retries = retries
+      @max_retries   = retries
       @retry_backoff = retry_backoff
-      @read_timeout = read_timeout
+      @read_timeout  = read_timeout
+      @env           = env || {}
     end
 
     # Connect to the MCP server by launching the command process via stdout/stdin
     # @return [Boolean] true if connection was successful
     # @raise [MCPClient::Errors::ConnectionError] if connection fails
     def connect
-      @stdin, @stdout, @stderr, @wait_thread = Open3.popen3(@command)
+      if @env.any?
+        @stdin, @stdout, @stderr, @wait_thread = Open3.popen3(@env, @command)
+      else
+        @stdin, @stdout, @stderr, @wait_thread = Open3.popen3(@command)
+      end
       true
     rescue StandardError => e
       raise MCPClient::Errors::ConnectionError, "Failed to connect to MCP server: #{e.message}"
