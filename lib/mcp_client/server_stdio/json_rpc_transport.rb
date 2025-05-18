@@ -5,6 +5,8 @@ module MCPClient
     # JSON-RPC request/notification plumbing for stdio transport
     module JsonRpcTransport
       # Ensure the server process is started and initialized (handshake)
+      # @return [void]
+      # @raise [MCPClient::Errors::ConnectionError] if initialization fails
       def ensure_initialized
         return if @initialized
 
@@ -16,6 +18,8 @@ module MCPClient
       end
 
       # Handshake: send initialize request and initialized notification
+      # @return [void]
+      # @raise [MCPClient::Errors::ConnectionError] if initialization fails
       def perform_initialize
         # Initialize request
         init_id = next_id
@@ -41,7 +45,7 @@ module MCPClient
       end
 
       # Generate a new unique request ID
-      # @return [Integer]
+      # @return [Integer] a unique request ID
       def next_id
         @mutex.synchronize do
           id = @next_id
@@ -83,9 +87,9 @@ module MCPClient
       end
 
       # Stream tool call fallback for stdio transport (yields single result)
-      # @param tool_name [String]
-      # @param parameters [Hash]
-      # @return [Enumerator]
+      # @param tool_name [String] the name of the tool to call
+      # @param parameters [Hash] the parameters to pass to the tool
+      # @return [Enumerator] a stream containing a single result
       def call_tool_streaming(tool_name, parameters)
         Enumerator.new do |yielder|
           yielder << call_tool(tool_name, parameters)

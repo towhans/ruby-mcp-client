@@ -4,6 +4,8 @@ module MCPClient
   class ServerSSE
     # Extracted module for back-off, ping, and reconnection logic
     module ReconnectMonitor
+      # Start an activity monitor thread to maintain the connection
+      # @return [void]
       def start_activity_monitor
         return if @activity_timer_thread&.alive?
 
@@ -22,10 +24,15 @@ module MCPClient
         end
       end
 
+      # Check if the connection is currently active
+      # @return [Boolean] true if connection is established and SSE is connected
       def connection_active?
         @mutex.synchronize { @connection_established && @sse_connected }
       end
 
+      # Main loop for the activity monitor thread
+      # @return [void]
+      # @private
       def activity_monitor_loop
         loop do
           sleep 1
@@ -63,6 +70,9 @@ module MCPClient
         end
       end
 
+      # Attempt to reconnect with exponential backoff
+      # @return [void]
+      # @private
       def attempt_reconnection
         if @reconnect_attempts < @max_reconnect_attempts
           begin
@@ -96,6 +106,9 @@ module MCPClient
         end
       end
 
+      # Attempt to ping the server to check if connection is still alive
+      # @return [void]
+      # @private
       def attempt_ping
         unless connection_active?
           @logger.debug('Skipping ping - connection not active')
@@ -120,6 +133,10 @@ module MCPClient
         end
       end
 
+      # Handle ping failures by incrementing a counter and logging
+      # @param error [StandardError] the error that caused the ping failure
+      # @return [void]
+      # @private
       def handle_ping_failure(error)
         @mutex.synchronize { @consecutive_ping_failures += 1 }
         consecutive_failures = @consecutive_ping_failures
@@ -132,10 +149,16 @@ module MCPClient
         end
       end
 
+      # Record activity to prevent unnecessary pings
+      # @return [void]
       def record_activity
         @mutex.synchronize { @last_activity_time = Time.now }
       end
 
+      # Wait for the connection to be established
+      # @param timeout [Numeric] timeout in seconds
+      # @return [void]
+      # @raise [MCPClient::Errors::ConnectionError] if connection times out or fails
       def wait_for_connection(timeout:)
         @mutex.synchronize do
           deadline = Time.now + timeout
@@ -156,6 +179,10 @@ module MCPClient
         end
       end
 
+      # Setup the SSE connection with Faraday
+      # @param uri [URI] the URI to connect to
+      # @return [Faraday::Connection] the configured connection
+      # @private
       def setup_sse_connection(uri)
         sse_base = "#{uri.scheme}://#{uri.host}:#{uri.port}"
 
@@ -170,6 +197,10 @@ module MCPClient
         @sse_conn
       end
 
+      # Handle authentication errors from SSE
+      # @param error [StandardError] the authentication error
+      # @return [void]
+      # @private
       def handle_sse_auth_error(error)
         error_message = "Authorization failed: HTTP #{error.response[:status]}"
         @logger.error(error_message)
@@ -181,6 +212,9 @@ module MCPClient
         end
       end
 
+      # Reset the connection state
+      # @return [void]
+      # @private
       def reset_connection_state
         @mutex.synchronize do
           @connection_established = false

@@ -12,11 +12,16 @@ module MCPClient
 
     include JsonRpcTransport
 
+    # @!attribute [r] command
+    #   @return [String] the command used to launch the server
+    # @!attribute [r] env
+    #   @return [Hash] environment variables for the subprocess
     attr_reader :command, :env
 
     # Timeout in seconds for responses
     READ_TIMEOUT = 15
 
+    # Initialize a new ServerStdio instance
     # @param command [String, Array] the stdio command to launch the MCP JSON-RPC server
     # @param retries [Integer] number of retry attempts on transient errors
     # @param retry_backoff [Numeric] base delay in seconds for exponential backoff
@@ -56,6 +61,7 @@ module MCPClient
     end
 
     # Spawn a reader thread to collect JSON-RPC responses
+    # @return [Thread] the reader thread
     def start_reader
       @reader_thread = Thread.new do
         @stdout.each_line do |line|
@@ -69,6 +75,7 @@ module MCPClient
     # Handle a line of output from the stdio server
     # Parses JSON-RPC messages and adds them to pending responses
     # @param line [String] line of output to parse
+    # @return [void]
     def handle_line(line)
       msg = JSON.parse(line)
       @logger.debug("Received line: #{line.chomp}")
@@ -138,6 +145,7 @@ module MCPClient
 
     # Clean up the server connection
     # Closes all stdio handles and terminates any running processes and threads
+    # @return [void]
     def cleanup
       return unless @stdin
 

@@ -31,6 +31,14 @@ module MCPClient
     MAX_RECONNECT_DELAY = 30
     JITTER_FACTOR = 0.25
 
+    # @!attribute [r] base_url
+    #   @return [String] The base URL of the MCP server
+    # @!attribute [r] tools
+    #   @return [Array<MCPClient::Tool>, nil] List of available tools (nil if not fetched yet)
+    # @!attribute [r] server_info
+    #   @return [Hash, nil] Server information from initialize response
+    # @!attribute [r] capabilities
+    #   @return [Hash, nil] Server capabilities from initialize response
     attr_reader :base_url, :tools, :server_info, :capabilities
 
     # @param base_url [String] The base URL of the MCP server
@@ -234,6 +242,8 @@ module MCPClient
 
     # Start the SSE thread to listen for events
     # This thread handles the long-lived Server-Sent Events connection
+    # @return [Thread] the SSE thread
+    # @private
     def start_sse_thread
       return if @sse_thread&.alive?
 
@@ -243,6 +253,8 @@ module MCPClient
     end
 
     # Handle the SSE connection in a separate method to reduce method size
+    # @return [void]
+    # @private
     def handle_sse_connection
       uri = URI.parse(@base_url)
       sse_path = uri.request_uri
@@ -264,6 +276,8 @@ module MCPClient
     end
 
     # Reset SSE connection state
+    # @return [void]
+    # @private
     def reset_sse_connection_state
       @mutex.synchronize do
         @sse_connected = false
@@ -272,6 +286,10 @@ module MCPClient
     end
 
     # Establish SSE connection with error handling
+    # @param conn [Faraday::Connection] the Faraday connection to use
+    # @param sse_path [String] the SSE endpoint path
+    # @return [void]
+    # @private
     def establish_sse_connection(conn, sse_path)
       conn.get(sse_path) do |req|
         @headers.each { |k, v| req.headers[k] = v }
@@ -289,6 +307,9 @@ module MCPClient
     end
 
     # Handle auth errors from SSE response
+    # @param err [Faraday::Error] the authorization error
+    # @return [void]
+    # @private
     def handle_sse_auth_response_error(err)
       error_status = err.response ? err.response[:status] : 'unknown'
       auth_error = "Authorization failed: HTTP #{error_status}"
@@ -302,6 +323,10 @@ module MCPClient
     end
 
     # Handle connection failures in SSE
+    # @param err [Faraday::ConnectionFailed] the connection failure error
+    # @return [void]
+    # @raise [Faraday::ConnectionFailed] re-raises the original error
+    # @private
     def handle_sse_connection_failed(err)
       @logger.error("Failed to connect to MCP server at #{@base_url}: #{err.message}")
 
@@ -313,6 +338,10 @@ module MCPClient
     end
 
     # Handle general Faraday errors in SSE
+    # @param err [Faraday::Error] the general Faraday error
+    # @return [void]
+    # @raise [Faraday::Error] re-raises the original error
+    # @private
     def handle_sse_general_error(err)
       @logger.error("Failed SSE connection: #{err.message}")
 
@@ -373,6 +402,7 @@ module MCPClient
     # @param error_message [String] The error message from the server
     # @param error_code [Integer, nil] The error code if available
     # @return [Boolean] True if it's an authorization error
+    # @private
     def authorization_error?(error_message, error_code)
       return true if error_message.include?('Unauthorized') || error_message.include?('authentication')
       return true if [401, -32_000].include?(error_code)
@@ -382,6 +412,9 @@ module MCPClient
 
     # Handle authorization error in SSE message
     # @param error_message [String] The error message from the server
+    # @return [void]
+    # @raise [MCPClient::Errors::ConnectionError] with an authentication error message
+    # @private
     def handle_sse_auth_error_message(error_message)
       @mutex.synchronize do
         @auth_error = "Authorization failed: #{error_message}"
@@ -394,6 +427,8 @@ module MCPClient
 
     # Request the tools list using JSON-RPC
     # @return [Array<Hash>] the tools data
+    # @raise [MCPClient::Errors::ToolCallError] if tools list retrieval fails
+    # @private
     def request_tools_list
       @mutex.synchronize do
         return @tools_data if @tools_data
