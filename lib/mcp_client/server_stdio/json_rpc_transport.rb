@@ -1,9 +1,12 @@
 # frozen_string_literal: true
 
+require 'mcp_client/json_rpc_common'
+
 module MCPClient
   class ServerStdio
     # JSON-RPC request/notification plumbing for stdio transport
     module JsonRpcTransport
+      include JsonRpcCommon
       # Ensure the server process is started and initialized (handshake)
       # @return [void]
       # @raise [MCPClient::Errors::ConnectionError] if initialization fails
@@ -23,16 +26,7 @@ module MCPClient
       def perform_initialize
         # Initialize request
         init_id = next_id
-        init_req = {
-          'jsonrpc' => '2.0',
-          'id' => init_id,
-          'method' => 'initialize',
-          'params' => {
-            'protocolVersion' => MCPClient::PROTOCOL_VERSION,
-            'capabilities' => {},
-            'clientInfo' => { 'name' => 'ruby-mcp-client', 'version' => MCPClient::VERSION }
-          }
-        }
+        init_req = build_jsonrpc_request('initialize', initialization_params, init_id)
         send_request(init_req)
         res = wait_response(init_id)
         if (err = res['error'])
@@ -40,7 +34,7 @@ module MCPClient
         end
 
         # Send initialized notification
-        notif = { 'jsonrpc' => '2.0', 'method' => 'notifications/initialized', 'params' => {} }
+        notif = build_jsonrpc_notification('notifications/initialized', {})
         @stdin.puts(notif.to_json)
       end
 
@@ -105,27 +99,12 @@ module MCPClient
       # @raise [MCPClient::Errors::ToolCallError] on tool call errors
       def rpc_request(method, params = {})
         ensure_initialized
-        attempts = 0
-        begin
+        with_retry do
           req_id = next_id
-          req = { 'jsonrpc' => '2.0', 'id' => req_id, 'method' => method, 'params' => params }
+          req = build_jsonrpc_request(method, params, req_id)
           send_request(req)
           res = wait_response(req_id)
-          if (err = res['error'])
-            raise MCPClient::Errors::ServerError, err['message']
-          end
-
-          res['result']
-        rescue MCPClient::Errors::ServerError, MCPClient::Errors::TransportError, IOError, Errno::ETIMEDOUT,
-               Errno::ECONNRESET => e
-          attempts += 1
-          if attempts <= @max_retries
-            delay = @retry_backoff * (2**(attempts - 1))
-            @logger.debug("Retry attempt #{attempts} after error: #{e.message}, sleeping #{delay}s")
-            sleep(delay)
-            retry
-          end
-          raise
+          process_jsonrpc_response(res)
         end
       end
 
@@ -135,7 +114,7 @@ module MCPClient
       # @return [void]
       def rpc_notify(method, params = {})
         ensure_initialized
-        notif = { 'jsonrpc' => '2.0', 'method' => method, 'params' => params }
+        notif = build_jsonrpc_notification(method, params)
         @stdin.puts(notif.to_json)
       end
     end

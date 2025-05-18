@@ -1,9 +1,12 @@
 # frozen_string_literal: true
 
+require 'mcp_client/json_rpc_common'
+
 module MCPClient
   class ServerSSE
     # JSON-RPC request/notification plumbing for SSE transport
     module JsonRpcTransport
+      include JsonRpcCommon
       # Generic JSON-RPC request: send method with params and return result
       # @param method [String] JSON-RPC method name
       # @param params [Hash] parameters for the request
@@ -17,7 +20,7 @@ module MCPClient
 
         with_retry do
           request_id = @mutex.synchronize { @request_id += 1 }
-          request = { jsonrpc: '2.0', id: request_id, method: method, params: params }
+          request = build_jsonrpc_request(method, params, request_id)
           send_jsonrpc_request(request)
         end
       end
@@ -28,19 +31,10 @@ module MCPClient
       # @return [void]
       def rpc_notify(method, params = {})
         ensure_initialized
-        notif = { jsonrpc: '2.0', method: method, params: params }
+        notif = build_jsonrpc_notification(method, params)
         post_json_rpc_request(notif)
       rescue MCPClient::Errors::ServerError, MCPClient::Errors::ConnectionError, Faraday::ConnectionFailed => e
         raise MCPClient::Errors::TransportError, "Failed to send notification: #{e.message}"
-      end
-
-      # Ping the server to keep the connection alive
-      # @return [Hash] the result of the ping request
-      # @raise [MCPClient::Errors::ToolCallError] if ping times out or fails
-      # @raise [MCPClient::Errors::TransportError] if there's a connection error
-      # @raise [MCPClient::Errors::ServerError] if the server returns an error
-      def ping
-        rpc_request('ping')
       end
 
       private
@@ -66,43 +60,16 @@ module MCPClient
       end
 
       # Perform JSON-RPC initialize handshake with the MCP server
+      # @return [void]
       def perform_initialize
         request_id = @mutex.synchronize { @request_id += 1 }
-        json_rpc_request = {
-          jsonrpc: '2.0',
-          id: request_id,
-          method: 'initialize',
-          params: {
-            'protocolVersion' => MCPClient::PROTOCOL_VERSION,
-            'capabilities' => {},
-            'clientInfo' => { 'name' => 'ruby-mcp-client', 'version' => MCPClient::VERSION }
-          }
-        }
+        json_rpc_request = build_jsonrpc_request('initialize', initialization_params, request_id)
         @logger.debug("Performing initialize RPC: #{json_rpc_request}")
         result = send_jsonrpc_request(json_rpc_request)
         return unless result.is_a?(Hash)
 
         @server_info = result['serverInfo'] if result.key?('serverInfo')
         @capabilities = result['capabilities'] if result.key?('capabilities')
-      end
-
-      # Helper: execute block with retry/backoff for transient errors
-      # @yield block to execute
-      # @return result of block
-      def with_retry
-        attempts = 0
-        begin
-          yield
-        rescue MCPClient::Errors::TransportError, IOError, Errno::ETIMEDOUT, Errno::ECONNRESET => e
-          attempts += 1
-          if attempts <= @max_retries
-            delay = @retry_backoff * (2**(attempts - 1))
-            @logger.debug("Retry attempt #{attempts} after error: #{e.message}, sleeping #{delay}s")
-            sleep(delay)
-            retry
-          end
-          raise
-        end
       end
 
       # Send a JSON-RPC request to the server and wait for result
@@ -267,9 +234,10 @@ module MCPClient
       # @param response [Faraday::Response] the HTTP response
       # @return [Hash] the parsed result
       # @raise [MCPClient::Errors::TransportError] if parsing fails
+      # @raise [MCPClient::Errors::ServerError] if the response contains an error
       def parse_direct_response(response)
         data = JSON.parse(response.body)
-        data['result']
+        process_jsonrpc_response(data)
       rescue JSON::ParserError => e
         raise MCPClient::Errors::TransportError, "Invalid JSON response from server: #{e.message}"
       end
