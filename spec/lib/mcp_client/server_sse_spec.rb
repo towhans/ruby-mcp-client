@@ -231,6 +231,7 @@ RSpec.describe MCPClient::ServerSSE do
       allow(server).to receive(:perform_initialize) do
         server.instance_variable_set(:@initialized, true)
       end
+      allow(server).to receive(:cleanup)
       # Disable SSE transport for testing synchronous HTTP fallback
       server.instance_variable_set(:@use_sse, false)
       # Prevent RPC request from triggering SSE reconnect logic

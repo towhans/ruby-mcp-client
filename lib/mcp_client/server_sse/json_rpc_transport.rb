@@ -13,11 +13,6 @@ module MCPClient
       # @raise [MCPClient::Errors::TransportError] if response isn't valid JSON
       # @raise [MCPClient::Errors::ToolCallError] for other errors during request execution
       def rpc_request(method, params = {})
-        if !@connection_established || !@sse_connected
-          @logger.debug('Connection not active, attempting to reconnect before RPC request')
-          cleanup
-          connect
-        end
         ensure_initialized
 
         with_retry do
@@ -50,13 +45,23 @@ module MCPClient
 
       private
 
-      # Ensure SSE initialization handshake has been performed
+      # Ensure SSE initialization handshake has been performed.
+      # Attempts to reconnect and reinitialize if the SSE connection is not active.
+      #
+      # @raise [MCPClient::Errors::ConnectionError] if reconnect or initialization fails
       def ensure_initialized
+        if !@connection_established || !@sse_connected
+          @logger.debug('Connection not active, attempting to reconnect before RPC request')
+          cleanup
+          connect
+          perform_initialize
+          @initialized = true
+          return
+        end
+
         return if @initialized
 
-        connect
         perform_initialize
-
         @initialized = true
       end
 
