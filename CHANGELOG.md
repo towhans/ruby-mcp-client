@@ -1,5 +1,15 @@
 # Changelog
 
+## 0.6.1 (2025-05-18)
+
+- Improved connection handling with automatic reconnection before RPC calls
+- Extracted common JSON-RPC functionality into a shared module for better maintainability
+- Enhanced error handling in SSE and stdio transports
+- Improved stdio command handling for better security (Array format to avoid shell injection)
+- Refactored server factory methods for improved parameter handling
+- Streamlined server creation with intelligent command and arguments handling
+- Unified error handling across transports
+
 ## 0.6.0 (2025-05-16)
 
 - Server names are now properly retained after configuration parsing
