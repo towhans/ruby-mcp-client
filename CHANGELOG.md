@@ -1,5 +1,11 @@
 # Changelog
 
+## 0.6.2 (2025-05-20)
+
+- Fixed reconnect attempts not being reset after successful ping
+- Added test verification for nested array $schema removal
+- Improved integration tests with Ruby-based test server instead of Node.js dependencies
+
 ## 0.6.1 (2025-05-18)
 
 - Improved connection handling with automatic reconnection before RPC calls
