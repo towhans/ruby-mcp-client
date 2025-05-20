@@ -93,7 +93,8 @@ module MCPClient
 
             @mutex.synchronize do
               @consecutive_ping_failures = 0
-              @reconnect_attempts += 1
+              # Reset attempt counter after a successful reconnect
+              @reconnect_attempts = 0
               @last_activity_time = Time.now
             end
           rescue StandardError => e

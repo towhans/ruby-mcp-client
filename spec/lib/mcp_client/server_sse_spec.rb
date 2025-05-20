@@ -659,8 +659,8 @@ RSpec.describe MCPClient::ServerSSE do
       # Directly run the reconnection method
       server.send(:attempt_reconnection)
 
-      # It should have incremented the reconnection attempts
-      expect(server.instance_variable_get(:@reconnect_attempts)).to eq(1)
+      # It should have reset the reconnection attempts after success
+      expect(server.instance_variable_get(:@reconnect_attempts)).to eq(0)
     end
 
     it 'resets ping failure counter after successful reconnection' do
@@ -680,6 +680,8 @@ RSpec.describe MCPClient::ServerSSE do
 
       # It should have reset the failure counter
       expect(server.instance_variable_get(:@consecutive_ping_failures)).to eq(0)
+      # And reset the reconnect attempt counter
+      expect(server.instance_variable_get(:@reconnect_attempts)).to eq(0)
     end
   end
 
