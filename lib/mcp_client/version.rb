@@ -2,7 +2,7 @@
 
 module MCPClient
   # Current version of the MCP client gem
-  VERSION = '0.6.2'
+  VERSION = '0.7.0'
 
   # JSON-RPC handshake protocol version (date-based)
   PROTOCOL_VERSION = '2024-11-05'
