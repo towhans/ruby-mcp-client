@@ -27,7 +27,7 @@ module MCPClient
 
       result = {}
       servers_data.each do |server_name, config|
-        next unless validate_server_config(config, server_name)
+        next unless valid_server_config?(config, server_name)
 
         server_config = process_server_config(config, server_name)
         next unless server_config
@@ -66,7 +66,7 @@ module MCPClient
     # @param config [Object] server configuration to validate
     # @param server_name [String] name of the server
     # @return [Boolean] true if valid, false otherwise
-    def validate_server_config(config, server_name)
+    def valid_server_config?(config, server_name)
       return true if config.is_a?(Hash)
 
       @logger.warn("Configuration for server '#{server_name}' is not an object; skipping.")
@@ -86,11 +86,11 @@ module MCPClient
       when 'stdio'
         parse_stdio_config(clean, config, server_name)
       when 'sse'
-        return nil unless parse_sse_config(clean, config, server_name)
+        return nil unless parse_sse_config?(clean, config, server_name)
       when 'streamable_http'
-        return nil unless parse_streamable_http_config(clean, config, server_name)
+        return nil unless parse_streamable_http_config?(clean, config, server_name)
       when 'http'
-        return nil unless parse_http_config(clean, config, server_name)
+        return nil unless parse_http_config?(clean, config, server_name)
       else
         @logger.warn("Unrecognized type '#{type}' for server '#{server_name}'; skipping.")
         return nil
@@ -164,7 +164,7 @@ module MCPClient
     # @param config [Hash] raw configuration from JSON
     # @param server_name [String] name of the server for error reporting
     # @return [Boolean] true if parsing succeeded, false if required elements are missing
-    def parse_sse_config(clean, config, server_name)
+    def parse_sse_config?(clean, config, server_name)
       # URL is required
       source = config['url']
       unless source
@@ -192,7 +192,7 @@ module MCPClient
     # @param config [Hash] raw configuration from JSON
     # @param server_name [String] name of the server for error reporting
     # @return [Boolean] true if parsing succeeded, false if required elements are missing
-    def parse_streamable_http_config(clean, config, server_name)
+    def parse_streamable_http_config?(clean, config, server_name)
       # URL is required
       source = config['url']
       unless source
@@ -225,7 +225,7 @@ module MCPClient
     # @param config [Hash] raw configuration from JSON
     # @param server_name [String] name of the server for error reporting
     # @return [Boolean] true if parsing succeeded, false if required elements are missing
-    def parse_http_config(clean, config, server_name)
+    def parse_http_config?(clean, config, server_name)
       # URL is required
       source = config['url']
       unless source
