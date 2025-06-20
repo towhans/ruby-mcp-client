@@ -39,7 +39,6 @@ module MCPClient
         @http_client = create_http_client
       end
 
-      # Custom setter for server_url to normalize it
       # @param url [String] Server URL to normalize
       def server_url=(url)
         @server_url = normalize_server_url(url)
