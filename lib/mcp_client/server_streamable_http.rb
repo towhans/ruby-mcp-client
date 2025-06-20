@@ -37,22 +37,16 @@ module MCPClient
     attr_reader :capabilities
 
     # @param base_url [String] The base URL of the MCP server
-    # @param endpoint [String] The JSON-RPC endpoint path (default: '/rpc')
-    # @param headers [Hash] Additional headers to include in requests
-    # @param read_timeout [Integer] Read timeout in seconds (default: 30)
-    # @param retries [Integer] number of retry attempts on transient errors (default: 3)
-    # @param retry_backoff [Numeric] base delay in seconds for exponential backoff (default: 1)
-    # @param name [String, nil] optional name for this server
-    # @param logger [Logger, nil] optional logger
-    def initialize(base_url:, endpoint: '/rpc', headers: {}, read_timeout: DEFAULT_READ_TIMEOUT,
-                   retries: DEFAULT_MAX_RETRIES, retry_backoff: 1, name: nil, logger: nil)
-      super(name: name)
-      @logger = logger || Logger.new($stdout, level: Logger::WARN)
+    # @param options [Hash] Server configuration options (same as ServerHTTP)
+    def initialize(base_url:, **options)
+      opts = default_options.merge(options)
+      super(name: opts[:name])
+      @logger = opts[:logger] || Logger.new($stdout, level: Logger::WARN)
       @logger.progname = self.class.name
       @logger.formatter = proc { |severity, _datetime, progname, msg| "#{severity} [#{progname}] #{msg}\n" }
 
-      @max_retries = retries
-      @retry_backoff = retry_backoff
+      @max_retries = opts[:retries]
+      @retry_backoff = opts[:retry_backoff]
 
       # Validate and normalize base_url
       raise ArgumentError, "Invalid or insecure server URL: #{base_url}" unless valid_server_url?(base_url)
@@ -73,25 +67,25 @@ module MCPClient
       end
 
       @base_url = build_base_url.call(uri)
-      @endpoint = if uri.path && !uri.path.empty? && uri.path != '/' && endpoint == '/rpc'
+      @endpoint = if uri.path && !uri.path.empty? && uri.path != '/' && opts[:endpoint] == '/rpc'
                     # If base_url contains a path and we're using default endpoint,
                     # treat the path as the endpoint and use the base URL without path
                     uri.path
                   else
                     # Standard case: base_url is just scheme://host:port, endpoint is separate
-                    endpoint
+                    opts[:endpoint]
                   end
 
       # Set up headers for Streamable HTTP requests
-      @headers = headers.merge({
-                                 'Content-Type' => 'application/json',
-                                 'Accept' => 'text/event-stream, application/json',
-                                 'Accept-Encoding' => 'gzip, deflate',
-                                 'User-Agent' => "ruby-mcp-client/#{MCPClient::VERSION}",
-                                 'Cache-Control' => 'no-cache'
-                               })
+      @headers = opts[:headers].merge({
+                                        'Content-Type' => 'application/json',
+                                        'Accept' => 'text/event-stream, application/json',
+                                        'Accept-Encoding' => 'gzip, deflate',
+                                        'User-Agent' => "ruby-mcp-client/#{MCPClient::VERSION}",
+                                        'Cache-Control' => 'no-cache'
+                                      })
 
-      @read_timeout = read_timeout
+      @read_timeout = opts[:read_timeout]
       @tools = nil
       @tools_data = nil
       @request_id = 0
@@ -101,6 +95,7 @@ module MCPClient
       @http_conn = nil
       @session_id = nil
       @last_event_id = nil
+      @oauth_provider = opts[:oauth_provider]
     end
 
     # Connect to the MCP server over Streamable HTTP
@@ -196,56 +191,40 @@ module MCPClient
       end
     end
 
-    # Override send_http_request to handle session headers for MCP protocol
-    def send_http_request(request)
-      conn = http_connection
+    # Override apply_request_headers to add session and SSE headers for MCP protocol
+    def apply_request_headers(req, request)
+      super
 
-      begin
-        response = conn.post(@endpoint) do |req|
-          # Apply all headers including custom ones
-          @headers.each { |k, v| req.headers[k] = v }
+      # Add session header if we have one (for non-initialize requests)
+      if @session_id && request['method'] != 'initialize'
+        req.headers['Mcp-Session-Id'] = @session_id
+        @logger.debug("Adding session header: Mcp-Session-Id: #{@session_id}")
+      end
 
-          # Add session header if we have one (for non-initialize requests)
-          if @session_id && request['method'] != 'initialize'
-            req.headers['Mcp-Session-Id'] = @session_id
-            @logger.debug("Adding session header: Mcp-Session-Id: #{@session_id}")
-          end
+      # Add Last-Event-ID header for resumability (if available)
+      return unless @last_event_id
 
-          # Add Last-Event-ID header for resumability (if available)
-          if @last_event_id
-            req.headers['Last-Event-ID'] = @last_event_id
-            @logger.debug("Adding Last-Event-ID header: #{@last_event_id}")
-          end
+      req.headers['Last-Event-ID'] = @last_event_id
+      @logger.debug("Adding Last-Event-ID header: #{@last_event_id}")
+    end
 
-          req.body = request.to_json
+    # Override handle_successful_response to capture session ID
+    def handle_successful_response(response, request)
+      super
+
+      # Capture session ID from initialize response with validation
+      return unless request['method'] == 'initialize' && response.success?
+
+      session_id = response.headers['mcp-session-id'] || response.headers['Mcp-Session-Id']
+      if session_id
+        if valid_session_id?(session_id)
+          @session_id = session_id
+          @logger.debug("Captured session ID: #{@session_id}")
+        else
+          @logger.warn("Invalid session ID format received: #{session_id.inspect}")
         end
-
-        handle_http_error_response(response) unless response.success?
-
-        # Capture session ID from initialize response with validation
-        if request['method'] == 'initialize' && response.success?
-          session_id = response.headers['mcp-session-id'] || response.headers['Mcp-Session-Id']
-          if session_id
-            if valid_session_id?(session_id)
-              @session_id = session_id
-              @logger.debug("Captured session ID: #{@session_id}")
-            else
-              @logger.warn("Invalid session ID format received: #{session_id.inspect}")
-            end
-          else
-            @logger.warn('No session ID found in initialize response headers')
-          end
-        end
-
-        log_response(response)
-        response
-      rescue Faraday::UnauthorizedError, Faraday::ForbiddenError => e
-        error_status = e.response ? e.response[:status] : 'unknown'
-        raise MCPClient::Errors::ConnectionError, "Authorization failed: HTTP #{error_status}"
-      rescue Faraday::ConnectionFailed => e
-        raise MCPClient::Errors::ConnectionError, "Server connection lost: #{e.message}"
-      rescue Faraday::Error => e
-        raise MCPClient::Errors::TransportError, "HTTP request failed: #{e.message}"
+      else
+        @logger.warn('No session ID found in initialize response headers')
       end
     end
 
@@ -281,6 +260,21 @@ module MCPClient
     end
 
     private
+
+    # Default options for server initialization
+    # @return [Hash] Default options
+    def default_options
+      {
+        endpoint: '/rpc',
+        headers: {},
+        read_timeout: DEFAULT_READ_TIMEOUT,
+        retries: DEFAULT_MAX_RETRIES,
+        retry_backoff: 1,
+        name: nil,
+        logger: nil,
+        oauth_provider: nil
+      }
+    end
 
     # Test basic connectivity to the HTTP endpoint
     # @return [void]
