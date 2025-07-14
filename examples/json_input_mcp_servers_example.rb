@@ -9,8 +9,8 @@
 #  1. Start Playwright MCP server: npx @playwright/mcp@latest --port 8931
 #  2. Run this example: ruby json_input_mcp_servers_example.rb
 #
-require_relative '../lib/mcp_client'
 require 'bundler/setup'
+require_relative '../lib/mcp_client'
 require 'json'
 require 'logger'
 

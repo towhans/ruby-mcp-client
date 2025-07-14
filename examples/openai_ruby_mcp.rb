@@ -2,8 +2,8 @@
 # frozen_string_literal: true
 
 # MCPClient integration example using the openai/openai-ruby gem
-require_relative '../lib/mcp_client'
 require 'bundler/setup'
+require_relative '../lib/mcp_client'
 require 'openai'
 require 'json'
 require 'logger'

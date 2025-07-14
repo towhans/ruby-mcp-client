@@ -5,6 +5,7 @@
 # This transport is designed for servers that use HTTP POST requests
 # but return Server-Sent Event formatted responses (like Zapier MCP)
 
+require 'bundler/setup'
 require_relative '../lib/mcp_client'
 require 'logger'
 

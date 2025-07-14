@@ -4,7 +4,9 @@
 # OAuth Example for Ruby MCP Client
 # This example demonstrates how to use OAuth 2.1 authentication with MCP servers
 
+require 'bundler/setup'
 require_relative '../lib/mcp_client'
+require 'logger'
 
 # Create an MCPClient client (stdio stub for demo)
 logger = Logger.new($stdout)

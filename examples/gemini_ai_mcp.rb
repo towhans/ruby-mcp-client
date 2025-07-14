@@ -17,6 +17,7 @@
 # 4. The tool result is sent back to Gemini in a follow-up request so the model can
 #    formulate a final answer for the user.
 
+require 'bundler/setup'
 require_relative '../lib/mcp_client'
 
 # The gem itself

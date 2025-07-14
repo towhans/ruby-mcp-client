@@ -2,6 +2,7 @@
 # frozen_string_literal: true
 
 # MCPClient integration example using the alexrudall/ruby-anthropic gem
+require 'bundler/setup'
 require_relative '../lib/mcp_client'
 require 'anthropic'
 require 'json'

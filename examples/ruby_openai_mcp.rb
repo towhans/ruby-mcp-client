@@ -4,6 +4,7 @@
 # MCPClient integration example using the alexrudall/ruby-openai gem
 # MCP server command:
 #  npx @playwright/mcp@latest --port 8931
+require 'bundler/setup'
 require_relative '../lib/mcp_client'
 require 'openai'
 require 'json'
