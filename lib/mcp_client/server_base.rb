@@ -77,5 +77,23 @@ module MCPClient
     def on_notification(&block)
       @notification_callback = block
     end
+
+    protected
+
+    # Initialize logger with proper formatter handling
+    # Preserves custom formatter if logger is provided, otherwise sets a default formatter
+    # @param logger [Logger, nil] custom logger to use, or nil to create a default one
+    # @return [Logger] the configured logger
+    def initialize_logger(logger)
+      if logger
+        @logger = logger
+        @logger.progname = self.class.name
+      else
+        @logger = Logger.new($stdout, level: Logger::WARN)
+        @logger.progname = self.class.name
+        @logger.formatter = proc { |severity, _datetime, progname, msg| "#{severity} [#{progname}] #{msg}\n" }
+      end
+      @logger
+    end
   end
 end

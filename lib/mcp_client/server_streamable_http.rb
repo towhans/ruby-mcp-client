@@ -42,9 +42,7 @@ module MCPClient
     def initialize(base_url:, **options)
       opts = default_options.merge(options)
       super(name: opts[:name])
-      @logger = opts[:logger] || Logger.new($stdout, level: Logger::WARN)
-      @logger.progname = self.class.name
-      @logger.formatter = proc { |severity, _datetime, progname, msg| "#{severity} [#{progname}] #{msg}\n" }
+      initialize_logger(opts[:logger])
 
       @max_retries = opts[:retries]
       @retry_backoff = opts[:retry_backoff]

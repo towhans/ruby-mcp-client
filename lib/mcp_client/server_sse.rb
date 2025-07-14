@@ -57,9 +57,7 @@ module MCPClient
     def initialize(base_url:, headers: {}, read_timeout: 30, ping: 10,
                    retries: 0, retry_backoff: 1, name: nil, logger: nil)
       super(name: name)
-      @logger = logger || Logger.new($stdout, level: Logger::WARN)
-      @logger.progname = self.class.name
-      @logger.formatter = proc { |severity, _datetime, progname, msg| "#{severity} [#{progname}] #{msg}\n" }
+      initialize_logger(logger)
       @max_retries = retries
       @retry_backoff = retry_backoff
       # Normalize base_url: preserve trailing slash if explicitly provided for SSE endpoints

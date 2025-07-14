@@ -39,9 +39,7 @@ module MCPClient
       @next_id = 1
       @pending = {}
       @initialized = false
-      @logger = logger || Logger.new($stdout, level: Logger::WARN)
-      @logger.progname = self.class.name
-      @logger.formatter = proc { |severity, _datetime, progname, msg| "#{severity} [#{progname}] #{msg}\n" }
+      initialize_logger(logger)
       @max_retries   = retries
       @retry_backoff = retry_backoff
       @read_timeout  = read_timeout
