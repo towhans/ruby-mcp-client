@@ -78,17 +78,17 @@ RSpec.describe MCPClient::JsonRpcCommon do
                             })
     end
 
-    it 'includes params field as null when params are empty' do
+    it 'includes params field as empty hash when params are empty' do
       request = instance.build_jsonrpc_request('test_method', {}, 123)
       expect(request).to eq({
                               'jsonrpc' => '2.0',
                               'id' => 123,
                               'method' => 'test_method',
-                              'params' => nil
+                              'params' => {}
                             })
     end
 
-    it 'includes params field as null when params are nil' do
+    it 'includes params field as nil when params are nil' do
       request = instance.build_jsonrpc_request('test_method', nil, 123)
       expect(request).to eq({
                               'jsonrpc' => '2.0',
@@ -109,16 +109,16 @@ RSpec.describe MCPClient::JsonRpcCommon do
                                  })
     end
 
-    it 'includes params field as null when params are empty' do
+    it 'includes params field as empty hash when params are empty' do
       notification = instance.build_jsonrpc_notification('test_notification', {})
       expect(notification).to eq({
                                    'jsonrpc' => '2.0',
                                    'method' => 'test_notification',
-                                   'params' => nil
+                                   'params' => {}
                                  })
     end
 
-    it 'includes params field as null when params are nil' do
+    it 'includes params field as nil when params are nil' do
       notification = instance.build_jsonrpc_notification('test_notification', nil)
       expect(notification).to eq({
                                    'jsonrpc' => '2.0',
