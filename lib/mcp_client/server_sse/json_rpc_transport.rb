@@ -70,6 +70,13 @@ module MCPClient
 
         @server_info = result['serverInfo']
         @capabilities = result['capabilities']
+
+        # Send initialized notification to acknowledge completion of initialization
+        initialized_notification = build_jsonrpc_notification('notifications/initialized', {})
+        post_json_rpc_request(initialized_notification)
+
+        # Small delay to ensure server processes the notification
+        sleep(0.1)
       end
 
       # Send a JSON-RPC request to the server and wait for result
@@ -133,6 +140,7 @@ module MCPClient
       def create_json_rpc_connection(base_url)
         Faraday.new(url: base_url) do |f|
           f.request :retry, max: @max_retries, interval: @retry_backoff, backoff_factor: 2
+          f.response :follow_redirects, limit: 3
           f.options.open_timeout = @read_timeout
           f.options.timeout = @read_timeout
           f.adapter Faraday.default_adapter

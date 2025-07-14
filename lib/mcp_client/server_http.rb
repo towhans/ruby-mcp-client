@@ -6,6 +6,7 @@ require 'monitor'
 require 'logger'
 require 'faraday'
 require 'faraday/retry'
+require 'faraday/follow_redirects'
 
 module MCPClient
   # Implementation of MCP server that communicates via HTTP requests/responses

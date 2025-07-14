@@ -6,6 +6,7 @@ require 'monitor'
 require 'logger'
 require 'faraday'
 require 'faraday/retry'
+require 'faraday/follow_redirects'
 
 module MCPClient
   # Implementation of MCP server that communicates via Server-Sent Events (SSE)
@@ -61,8 +62,8 @@ module MCPClient
       @logger.formatter = proc { |severity, _datetime, progname, msg| "#{severity} [#{progname}] #{msg}\n" }
       @max_retries = retries
       @retry_backoff = retry_backoff
-      # Normalize base_url: strip any trailing slash, use exactly as provided
-      @base_url = base_url.chomp('/')
+      # Normalize base_url: preserve trailing slash if explicitly provided for SSE endpoints
+      @base_url = base_url
       @headers = headers.merge({
                                  'Accept' => 'text/event-stream',
                                  'Cache-Control' => 'no-cache',
@@ -369,38 +370,9 @@ module MCPClient
       record_activity if chunk.include?('event:')
 
       # Check for direct JSON error responses (which aren't proper SSE events)
-      if chunk.start_with?('{') && chunk.include?('"error"') &&
-         (chunk.include?('Unauthorized') || chunk.include?('authentication'))
-        begin
-          data = JSON.parse(chunk)
-          if data['error']
-            error_message = data['error']['message'] || 'Unknown server error'
+      handle_json_error_response(chunk)
 
-            @mutex.synchronize do
-              @auth_error = "Authorization failed: #{error_message}"
-
-              @connection_established = false
-              @connection_cv.broadcast
-            end
-
-            raise MCPClient::Errors::ConnectionError, "Authorization failed: #{error_message}"
-          end
-        rescue JSON::ParserError
-          # Not valid JSON, process normally
-        end
-      end
-
-      event_buffers = nil
-      @mutex.synchronize do
-        @buffer += chunk
-
-        # Extract all complete events from the buffer
-        event_buffers = []
-        while (event_end = @buffer.index("\n\n"))
-          event_data = @buffer.slice!(0, event_end + 2)
-          event_buffers << event_data
-        end
-      end
+      event_buffers = extract_complete_events(chunk)
 
       # Process extracted events outside the mutex to avoid deadlocks
       event_buffers&.each { |event_data| parse_and_handle_sse_event(event_data) }
@@ -416,6 +388,68 @@ module MCPClient
       return true if [401, -32_000].include?(error_code)
 
       false
+    end
+
+    # Handle JSON error responses embedded in SSE chunks
+    # @param chunk [String] the chunk to check for JSON errors
+    # @return [void]
+    # @raise [MCPClient::Errors::ConnectionError] if authentication error is found
+    # @private
+    def handle_json_error_response(chunk)
+      return unless chunk.start_with?('{') && chunk.include?('"error"') &&
+                    (chunk.include?('Unauthorized') || chunk.include?('authentication'))
+
+      begin
+        data = JSON.parse(chunk)
+        if data['error']
+          error_message = data['error']['message'] || 'Unknown server error'
+
+          @mutex.synchronize do
+            @auth_error = "Authorization failed: #{error_message}"
+            @connection_established = false
+            @connection_cv.broadcast
+          end
+
+          raise MCPClient::Errors::ConnectionError, "Authorization failed: #{error_message}"
+        end
+      rescue JSON::ParserError
+        # Not valid JSON, process normally
+      end
+    end
+
+    # Extract complete SSE events from the buffer
+    # @param chunk [String] the chunk to add to the buffer
+    # @return [Array<String>, nil] array of complete events or nil if none
+    # @private
+    def extract_complete_events(chunk)
+      event_buffers = nil
+      @mutex.synchronize do
+        @buffer += chunk
+
+        # Extract all complete events from the buffer
+        # Handle both Unix (\n\n) and Windows (\r\n\r\n) line endings
+        event_buffers = []
+        while (event_end = @buffer.index("\n\n") || @buffer.index("\r\n\r\n"))
+          event_data = extract_single_event(event_end)
+          event_buffers << event_data
+        end
+      end
+      event_buffers
+    end
+
+    # Extract a single event from the buffer
+    # @param event_end [Integer] the position where the event ends
+    # @return [String] the extracted event data
+    # @private
+    def extract_single_event(event_end)
+      # Determine the line ending style and extract accordingly
+      crlf_index = @buffer.index("\r\n\r\n")
+      lf_index = @buffer.index("\n\n")
+      if crlf_index && (lf_index.nil? || crlf_index < lf_index)
+        @buffer.slice!(0, event_end + 4) # \r\n\r\n is 4 chars
+      else
+        @buffer.slice!(0, event_end + 2) # \n\n is 2 chars
+      end
     end
 
     # Handle authorization error in SSE message

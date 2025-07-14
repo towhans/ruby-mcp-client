@@ -39,12 +39,14 @@ module MCPClient
     # @param id [Integer] request ID
     # @return [Hash] the JSON-RPC request object
     def build_jsonrpc_request(method, params, id)
-      {
+      request = {
         'jsonrpc' => '2.0',
         'id' => id,
-        'method' => method,
-        'params' => params
+        'method' => method
       }
+      # Always include params field, use null for empty parameters
+      request['params'] = params.nil? || params.empty? ? nil : params
+      request
     end
 
     # Build a JSON-RPC notification object (no response expected)
@@ -52,11 +54,13 @@ module MCPClient
     # @param params [Hash] parameters for the notification
     # @return [Hash] the JSON-RPC notification object
     def build_jsonrpc_notification(method, params)
-      {
+      notification = {
         'jsonrpc' => '2.0',
-        'method' => method,
-        'params' => params
+        'method' => method
       }
+      # Always include params field, use null for empty parameters
+      notification['params'] = params.nil? || params.empty? ? nil : params
+      notification
     end
 
     # Generate initialization parameters for MCP protocol

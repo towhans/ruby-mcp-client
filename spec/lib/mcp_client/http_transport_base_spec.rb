@@ -409,7 +409,7 @@ RSpec.describe MCPClient::HttpTransportBase do
       params = transport.test_initialization_params
 
       expect(params).to include(
-        'protocolVersion' => MCPClient::HTTP_PROTOCOL_VERSION,
+        'protocolVersion' => MCPClient::PROTOCOL_VERSION,
         'capabilities' => {},
         'clientInfo' => {
           'name' => 'ruby-mcp-client',

@@ -82,7 +82,7 @@ RSpec.describe MCPClient::ServerStreamableHTTP do
               jsonrpc: '2.0',
               id: 1,
               result: {
-                protocolVersion: MCPClient::HTTP_PROTOCOL_VERSION,
+                protocolVersion: MCPClient::PROTOCOL_VERSION,
                 capabilities: {},
                 serverInfo: { name: 'test-server', version: '1.0.0' }
               }
@@ -93,7 +93,7 @@ RSpec.describe MCPClient::ServerStreamableHTTP do
 
       server.connect
 
-      expect(init_request_body['params']['protocolVersion']).to eq(MCPClient::HTTP_PROTOCOL_VERSION)
+      expect(init_request_body['params']['protocolVersion']).to eq(MCPClient::PROTOCOL_VERSION)
       expect(init_request_body['params']['protocolVersion']).to eq('2025-03-26')
     end
 

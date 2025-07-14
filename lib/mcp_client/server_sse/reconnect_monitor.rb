@@ -191,6 +191,7 @@ module MCPClient
           f.options.open_timeout = 10
           f.options.timeout = nil
           f.request :retry, max: @max_retries, interval: @retry_backoff, backoff_factor: 2
+          f.response :follow_redirects, limit: 3
           f.adapter Faraday.default_adapter
         end
 

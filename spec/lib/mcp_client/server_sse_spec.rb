@@ -66,7 +66,7 @@ RSpec.describe MCPClient::ServerSSE do
 
     it 'handles base_url that already has trailing slash' do
       server = described_class.new(base_url: 'https://example.com/mcp/')
-      expect(server.base_url).to eq('https://example.com/mcp')
+      expect(server.base_url).to eq('https://example.com/mcp/')
     end
 
     it 'initializes auth_error to nil' do

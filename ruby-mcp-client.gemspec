@@ -19,6 +19,7 @@ Gem::Specification.new do |spec|
   spec.require_paths = ['lib']
   # HTTP instrumentation
   spec.add_dependency 'faraday', '~> 2.0'
+  spec.add_dependency 'faraday-follow_redirects', '~> 0.3'
   spec.add_dependency 'faraday-retry', '~> 2.0'
 
   spec.add_development_dependency 'rdoc', '~> 6.5'

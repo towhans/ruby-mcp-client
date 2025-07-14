@@ -119,7 +119,7 @@ module MCPClient
     # @return [Hash] the initialization parameters
     def initialization_params
       {
-        'protocolVersion' => MCPClient::HTTP_PROTOCOL_VERSION,
+        'protocolVersion' => MCPClient::PROTOCOL_VERSION,
         'capabilities' => {},
         'clientInfo' => { 'name' => 'ruby-mcp-client', 'version' => MCPClient::VERSION }
       }

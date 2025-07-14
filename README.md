@@ -47,6 +47,8 @@ This Ruby MCP Client implements key features from the latest MCP specification (
 ### Implemented Features
 - **OAuth 2.1 Authorization Framework** - Complete authentication with PKCE, dynamic client registration, server discovery, and runtime configuration
 - **Streamable HTTP Transport** - Enhanced transport with Server-Sent Event formatted responses and session management
+- **HTTP Redirect Support** - Automatic redirect handling for both SSE and HTTP transports with configurable limits
+- **FastMCP Compatibility** - Full compatibility with FastMCP servers including proper line ending handling
 
 ## Usage
 
@@ -333,6 +335,48 @@ sse_client.cleanup
 
 See `examples/mcp_sse_server_example.rb` for the full Playwright SSE example.
 
+### FastMCP Example
+
+The repository includes a complete FastMCP server example that demonstrates the Ruby MCP client working with a Python FastMCP server:
+
+```ruby
+# Start the FastMCP server
+# python examples/echo_server.py
+
+# Run the Ruby client
+# bundle exec ruby examples/echo_server_client.rb
+
+require 'mcp_client'
+
+# Connect to FastMCP server
+client = MCPClient.create_client(
+  mcp_server_configs: [
+    MCPClient.sse_config(
+      base_url: 'http://127.0.0.1:8000/sse/',
+      read_timeout: 30
+    )
+  ]
+)
+
+# List available tools
+tools = client.list_tools
+puts "Found #{tools.length} tools:"
+tools.each { |tool| puts "- #{tool.name}: #{tool.description}" }
+
+# Use the tools
+result = client.call_tool('echo', { message: 'Hello from Ruby!' })
+result = client.call_tool('reverse', { text: 'FastMCP rocks!' })
+
+client.cleanup
+```
+
+The FastMCP example includes:
+- **`echo_server.py`** - A Python FastMCP server with 4 interactive tools
+- **`echo_server_client.rb`** - Ruby client demonstrating all features
+- **`README_ECHO_SERVER.md`** - Complete setup and usage instructions
+
+This example showcases redirect support, proper line ending handling, and seamless integration between Ruby and Python MCP implementations.
+
 ### Integration Examples
 
 The repository includes examples for integrating with popular AI APIs:
@@ -421,6 +465,7 @@ Complete examples can be found in the `examples/` directory:
 - `ruby_anthropic_mcp.rb` - Integration with alexrudall/ruby-anthropic gem
 - `gemini_ai_mcp.rb` - Integration with Google Vertex AI and Gemini models
 - `mcp_sse_server_example.rb` - SSE transport with Playwright MCP
+- `echo_server.py` & `echo_server_client.rb` - FastMCP server example with full setup
 
 ## MCP Server Compatibility
 
@@ -428,6 +473,7 @@ This client works with any MCP-compatible server, including:
 
 - [@modelcontextprotocol/server-filesystem](https://www.npmjs.com/package/@modelcontextprotocol/server-filesystem) - File system access
 - [@playwright/mcp](https://www.npmjs.com/package/@playwright/mcp) - Browser automation
+- [FastMCP](https://github.com/jlowin/fastmcp) - Python framework for building MCP servers
 - Custom servers implementing the MCP protocol
 
 ### Server Definition Files
@@ -645,6 +691,7 @@ For complete OAuth documentation, see [OAUTH.md](OAUTH.md).
 The SSE client implementation provides these key features:
 
 - **Robust connection handling**: Properly manages HTTP/HTTPS connections with configurable timeouts and retries
+- **Automatic redirect support**: Follows HTTP redirects up to 3 hops for seamless server integration
 - **Advanced connection management**:
   - **Inactivity tracking**: Monitors connection activity to detect idle connections
   - **Automatic ping**: Sends ping requests after a configurable period of inactivity (default: 10 seconds)
@@ -674,6 +721,7 @@ The SSE client implementation provides these key features:
 The HTTP transport provides a simpler, stateless communication mechanism for MCP servers:
 
 - **Request/Response Model**: Standard HTTP request/response cycle for each JSON-RPC call
+- **Automatic redirect support**: Follows HTTP redirects up to 3 hops for seamless server integration
 - **JSON-Only Responses**: Accepts only `application/json` responses (no SSE support)
 - **Session Support**: Automatic session header (`Mcp-Session-Id`) capture and injection for session-based MCP servers
 - **Session Termination**: Proper session cleanup with HTTP DELETE requests during connection teardown
