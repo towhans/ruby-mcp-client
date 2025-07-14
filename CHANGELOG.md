@@ -1,5 +1,22 @@
 # Changelog
 
+## 0.7.2 (2025-07-14)
+
+### Bug Fixes
+- **JSON-RPC Parameter Handling**: Fixed SSE transport compatibility with Playwright MCP servers by reverting JSON-RPC parameter handling to not send `null` for empty parameters
+- **Logger Formatter Preservation**: Fixed issue where custom logger formatters were being overridden in server implementations
+
+### Transport Improvements
+- **HTTP Redirect Support**: Added automatic redirect following (up to 3 hops) for both SSE and HTTP transports via faraday-follow_redirects gem
+
+### Examples and Testing
+- **FastMCP Integration**: Added complete FastMCP echo server example demonstrating Ruby-Python MCP interoperability
+- **Comprehensive Logger Tests**: Added 29 new test cases covering logger functionality across all server types
+
+### Developer Experience
+- **Protocol Version Consistency**: Updated all examples and configurations to use MCP protocol version 2025-03-26
+- **Enhanced Documentation**: Improved example scripts with better error handling and user guidance
+
 ## 0.7.1 (2025-06-20)
 
 ### OAuth 2.1 Authentication Framework
