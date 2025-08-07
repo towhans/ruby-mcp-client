@@ -45,14 +45,31 @@ module MCPClient
             env: cfg[:env]
           )
         when 'sse'
-          configs << MCPClient.sse_config(base_url: cfg[:url], headers: cfg[:headers] || {}, name: cfg[:name],
-                                          logger: logger)
+          configs << MCPClient.sse_config(
+            base_url: cfg[:url],
+            headers: cfg[:headers] || {},
+            ssl_verify: cfg[:ssl_verify].nil? ? true : cfg[:ssl_verify],
+            name: cfg[:name],
+            logger: logger
+          )
         when 'http'
-          configs << MCPClient.http_config(base_url: cfg[:url], endpoint: cfg[:endpoint],
-                                           headers: cfg[:headers] || {}, name: cfg[:name], logger: logger)
+          configs << MCPClient.http_config(
+            base_url: cfg[:url],
+            endpoint: cfg[:endpoint],
+            headers: cfg[:headers] || {},
+            ssl_verify: cfg[:ssl_verify].nil? ? true : cfg[:ssl_verify],
+            name: cfg[:name],
+            logger: logger
+          )
         when 'streamable_http'
-          configs << MCPClient.streamable_http_config(base_url: cfg[:url], endpoint: cfg[:endpoint],
-                                                      headers: cfg[:headers] || {}, name: cfg[:name], logger: logger)
+          configs << MCPClient.streamable_http_config(
+            base_url: cfg[:url],
+            endpoint: cfg[:endpoint],
+            headers: cfg[:headers] || {},
+            ssl_verify: cfg[:ssl_verify].nil? ? true : cfg[:ssl_verify],
+            name: cfg[:name],
+            logger: logger
+          )
         end
       end
     end
@@ -81,11 +98,12 @@ module MCPClient
   # @param ping [Integer] time in seconds after which to send ping if no activity (default: 10)
   # @param retries [Integer] number of retry attempts (default: 0)
   # @param retry_backoff [Integer] backoff delay in seconds (default: 1)
+  # @param ssl_verify [Boolean] enable SSL certificate verification (default: true)
   # @param name [String, nil] optional name for this server
   # @param logger [Logger, nil] optional logger for server operations
   # @return [Hash] server configuration
   def self.sse_config(base_url:, headers: {}, read_timeout: 30, ping: 10, retries: 0, retry_backoff: 1,
-                      name: nil, logger: nil)
+                      ssl_verify: true, name: nil, logger: nil)
     {
       type: 'sse',
       base_url: base_url,
@@ -94,6 +112,7 @@ module MCPClient
       ping: ping,
       retries: retries,
       retry_backoff: retry_backoff,
+      ssl_verify: ssl_verify,
       name: name,
       logger: logger
     }
@@ -106,11 +125,12 @@ module MCPClient
   # @param read_timeout [Integer] read timeout in seconds (default: 30)
   # @param retries [Integer] number of retry attempts (default: 3)
   # @param retry_backoff [Integer] backoff delay in seconds (default: 1)
+  # @param ssl_verify [Boolean] enable SSL certificate verification (default: true)
   # @param name [String, nil] optional name for this server
   # @param logger [Logger, nil] optional logger for server operations
   # @return [Hash] server configuration
   def self.http_config(base_url:, endpoint: '/rpc', headers: {}, read_timeout: 30, retries: 3, retry_backoff: 1,
-                       name: nil, logger: nil)
+                       ssl_verify: true, name: nil, logger: nil)
     {
       type: 'http',
       base_url: base_url,
@@ -119,6 +139,7 @@ module MCPClient
       read_timeout: read_timeout,
       retries: retries,
       retry_backoff: retry_backoff,
+      ssl_verify: ssl_verify,
       name: name,
       logger: logger
     }
@@ -132,11 +153,12 @@ module MCPClient
   # @param read_timeout [Integer] Read timeout in seconds (default: 30)
   # @param retries [Integer] Number of retry attempts on transient errors (default: 3)
   # @param retry_backoff [Integer] Backoff delay in seconds (default: 1)
+  # @param ssl_verify [Boolean] Enable SSL certificate verification (default: true)
   # @param name [String, nil] Optional name for this server
   # @param logger [Logger, nil] Optional logger for server operations
   # @return [Hash] server configuration
   def self.streamable_http_config(base_url:, endpoint: '/rpc', headers: {}, read_timeout: 30, retries: 3,
-                                  retry_backoff: 1, name: nil, logger: nil)
+                                  retry_backoff: 1, ssl_verify: true, name: nil, logger: nil)
     {
       type: 'streamable_http',
       base_url: base_url,
@@ -145,6 +167,7 @@ module MCPClient
       read_timeout: read_timeout,
       retries: retries,
       retry_backoff: retry_backoff,
+      ssl_verify: ssl_verify,
       name: name,
       logger: logger
     }

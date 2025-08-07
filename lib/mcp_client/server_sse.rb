@@ -55,7 +55,7 @@ module MCPClient
     # @param name [String, nil] optional name for this server
     # @param logger [Logger, nil] optional logger
     def initialize(base_url:, headers: {}, read_timeout: 30, ping: 10,
-                   retries: 0, retry_backoff: 1, name: nil, logger: nil)
+                   retries: 0, retry_backoff: 1, ssl_verify: true, name: nil, logger: nil)
       super(name: name)
       initialize_logger(logger)
       @max_retries = retries
@@ -92,6 +92,7 @@ module MCPClient
       # Time of last activity
       @last_activity_time = Time.now
       @activity_timer_thread = nil
+      @ssl_verify_mode = ssl_verify
     end
 
     # Stream tool call fallback for SSE transport (yields single result)

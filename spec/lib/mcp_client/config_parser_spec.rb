@@ -154,7 +154,7 @@ RSpec.describe MCPClient::ConfigParser do
           parser = described_class.new(path, logger: logger)
           result = parser.parse
 
-          expect(result['server1'].keys).to match_array(%i[type url headers name])
+          expect(result['server1'].keys).to match_array(%i[type url headers ssl_verify name])
           expect(result['server1']).not_to have_key(:comment)
           expect(result['server1']).not_to have_key(:description)
         end

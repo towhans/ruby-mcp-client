@@ -181,9 +181,14 @@ module MCPClient
       headers = config['headers']
       headers = headers.is_a?(Hash) ? headers.transform_keys(&:to_s) : {}
 
+      # SSL verification is optional (defaults to true)
+      ssl_verify = config['ssl_verify']
+      ssl_verify = true if ssl_verify.nil?
+
       # Update clean config
       clean[:url] = source
       clean[:headers] = headers
+      clean[:ssl_verify] = ssl_verify
       true
     end
 
@@ -213,10 +218,15 @@ module MCPClient
       endpoint = config['endpoint']
       endpoint = endpoint.to_s if endpoint && !endpoint.is_a?(String)
 
+      # SSL verification is optional (defaults to true)
+      ssl_verify = config['ssl_verify']
+      ssl_verify = true if ssl_verify.nil?
+
       # Update clean config
       clean[:url] = source
       clean[:headers] = headers
       clean[:endpoint] = endpoint if endpoint
+      clean[:ssl_verify] = ssl_verify
       true
     end
 
@@ -246,10 +256,15 @@ module MCPClient
       endpoint = config['endpoint']
       endpoint = endpoint.to_s if endpoint && !endpoint.is_a?(String)
 
+      # SSL verification is optional (defaults to true)
+      ssl_verify = config['ssl_verify']
+      ssl_verify = true if ssl_verify.nil?
+
       # Update clean config
       clean[:url] = source
       clean[:headers] = headers
       clean[:endpoint] = endpoint if endpoint
+      clean[:ssl_verify] = ssl_verify
       true
     end
 

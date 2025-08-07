@@ -44,6 +44,7 @@ module MCPClient
     # @option options [Integer] :read_timeout Read timeout in seconds (default: 30)
     # @option options [Integer] :retries Retry attempts on transient errors (default: 3)
     # @option options [Numeric] :retry_backoff Base delay for exponential backoff (default: 1)
+    # @option options [Boolean] :ssl_verify Enable SSL certificate verification (default: true)
     # @option options [String, nil] :name Optional name for this server
     # @option options [Logger, nil] :logger Optional logger
     # @option options [MCPClient::Auth::OAuthProvider, nil] :oauth_provider Optional OAuth provider
@@ -100,6 +101,7 @@ module MCPClient
       @http_conn = nil
       @session_id = nil
       @oauth_provider = opts[:oauth_provider]
+      @ssl_verify_mode = opts[:ssl_verify]
     end
 
     # Connect to the MCP server over HTTP
@@ -268,6 +270,7 @@ module MCPClient
         read_timeout: DEFAULT_READ_TIMEOUT,
         retries: DEFAULT_MAX_RETRIES,
         retry_backoff: 1,
+        ssl_verify: true,
         name: nil,
         logger: nil,
         oauth_provider: nil

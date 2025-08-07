@@ -262,6 +262,13 @@ module MCPClient
         f.request :retry, max: @max_retries, interval: @retry_backoff, backoff_factor: 2
         f.options.open_timeout = @read_timeout
         f.options.timeout = @read_timeout
+
+        # Configure SSL verification if specified
+        if @ssl_verify_mode == false
+          f.ssl.verify = false
+          @logger&.warn("SSL verification disabled - this should only be used in development/testing")
+        end
+
         f.adapter Faraday.default_adapter
       end
     end

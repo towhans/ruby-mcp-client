@@ -95,6 +95,7 @@ module MCPClient
       @session_id = nil
       @last_event_id = nil
       @oauth_provider = opts[:oauth_provider]
+      @ssl_verify_mode = opts[:ssl_verify]
     end
 
     # Connect to the MCP server over Streamable HTTP
@@ -269,6 +270,7 @@ module MCPClient
         read_timeout: DEFAULT_READ_TIMEOUT,
         retries: DEFAULT_MAX_RETRIES,
         retry_backoff: 1,
+        ssl_verify: true,
         name: nil,
         logger: nil,
         oauth_provider: nil

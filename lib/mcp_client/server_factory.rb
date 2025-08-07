@@ -56,6 +56,7 @@ module MCPClient
         ping: config[:ping] || 10,
         retries: config[:retries] || 0,
         retry_backoff: config[:retry_backoff] || 1,
+        ssl_verify: config[:ssl_verify] || true,
         name: config[:name],
         logger: logger
       )
@@ -75,6 +76,7 @@ module MCPClient
         read_timeout: config[:read_timeout] || 30,
         retries: config[:retries] || 3,
         retry_backoff: config[:retry_backoff] || 1,
+        ssl_verify: config[:ssl_verify] || true,
         name: config[:name],
         logger: logger
       )
@@ -94,6 +96,7 @@ module MCPClient
         read_timeout: config[:read_timeout] || 30,
         retries: config[:retries] || 3,
         retry_backoff: config[:retry_backoff] || 1,
+        ssl_verify: config[:ssl_verify] || true,
         name: config[:name],
         logger: logger
       )

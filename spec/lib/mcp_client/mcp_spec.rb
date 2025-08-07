@@ -30,7 +30,7 @@ RSpec.describe MCPClient do
       headers = { 'Authorization' => 'Bearer token' }
       cfg = MCPClient.sse_config(base_url: url, headers: headers)
       expect(cfg).to eq(type: 'sse', base_url: url, headers: headers, read_timeout: 30, ping: 10, retries: 0,
-                        retry_backoff: 1, name: nil, logger: nil)
+                        retry_backoff: 1, ssl_verify: true, name: nil, logger: nil)
     end
 
     it 'builds an sse server config hash with custom parameters' do
@@ -39,7 +39,7 @@ RSpec.describe MCPClient do
       cfg = MCPClient.sse_config(base_url: url, headers: headers, read_timeout: 60, ping: 15, retries: 3,
                                  retry_backoff: 2)
       expect(cfg).to eq(type: 'sse', base_url: url, headers: headers, read_timeout: 60, ping: 15, retries: 3,
-                        retry_backoff: 2, name: nil, logger: nil)
+                        retry_backoff: 2, ssl_verify: true, name: nil, logger: nil)
     end
 
     it 'allows overriding the default ping value' do
