@@ -17,6 +17,7 @@ module MCPClient
     # @option options [Integer] :read_timeout Read timeout in seconds (default: 30)
     # @option options [Integer] :retries Retry attempts on transient errors (default: 3)
     # @option options [Numeric] :retry_backoff Base delay for exponential backoff (default: 1)
+    # @option options [Boolean] :ssl_verify Enable SSL certificate verification (default: true)
     # @option options [String, nil] :name Optional name for this server
     # @option options [Logger, nil] :logger Optional logger
     # @option options [Object, nil] :storage Storage backend for OAuth tokens and client info
@@ -29,7 +30,8 @@ module MCPClient
         redirect_uri: opts[:redirect_uri],
         scope: opts[:scope],
         logger: opts[:logger],
-        storage: opts[:storage]
+        storage: opts[:storage],
+        ssl_verify: opts[:ssl_verify]
       )
 
       ServerHTTP.new(
@@ -39,6 +41,7 @@ module MCPClient
         read_timeout: opts[:read_timeout],
         retries: opts[:retries],
         retry_backoff: opts[:retry_backoff],
+        ssl_verify: opts[:ssl_verify],
         name: opts[:name],
         logger: opts[:logger],
         oauth_provider: oauth_provider
@@ -57,7 +60,8 @@ module MCPClient
         redirect_uri: opts[:redirect_uri],
         scope: opts[:scope],
         logger: opts[:logger],
-        storage: opts[:storage]
+        storage: opts[:storage],
+        ssl_verify: opts[:ssl_verify]
       )
 
       ServerStreamableHTTP.new(
@@ -67,6 +71,7 @@ module MCPClient
         read_timeout: opts[:read_timeout],
         retries: opts[:retries],
         retry_backoff: opts[:retry_backoff],
+        ssl_verify: opts[:ssl_verify],
         name: opts[:name],
         logger: opts[:logger],
         oauth_provider: oauth_provider
@@ -118,6 +123,7 @@ module MCPClient
         read_timeout: 30,
         retries: 3,
         retry_backoff: 1,
+        ssl_verify: true,
         name: nil,
         logger: nil,
         storage: nil

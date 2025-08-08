@@ -21,7 +21,7 @@ module MCPClient
       #   @return [Object] Storage backend for tokens and client info
       # @!attribute [r] server_url
       #   @return [String] The MCP server URL (normalized)
-      attr_accessor :redirect_uri, :scope, :logger, :storage
+      attr_accessor :redirect_uri, :scope, :logger, :storage, :ssl_verify
       attr_reader :server_url
 
       # Initialize OAuth provider
@@ -30,12 +30,13 @@ module MCPClient
       # @param scope [String, nil] OAuth scope
       # @param logger [Logger, nil] Optional logger
       # @param storage [Object, nil] Storage backend for tokens and client info
-      def initialize(server_url:, redirect_uri: 'http://localhost:8080/callback', scope: nil, logger: nil, storage: nil)
+      def initialize(server_url:, redirect_uri: 'http://localhost:8080/callback', scope: nil, logger: nil, storage: nil, ssl_verify: true)
         self.server_url = server_url
         self.redirect_uri = redirect_uri
         self.scope = scope
         self.logger = logger || Logger.new($stdout, level: Logger::WARN)
         self.storage = storage || MemoryStorage.new
+        self.ssl_verify = ssl_verify
         @http_client = create_http_client
       end
 
@@ -172,6 +173,13 @@ module MCPClient
         Faraday.new do |f|
           f.request :retry, max: 3, interval: 1, backoff_factor: 2
           f.options.timeout = 30
+
+          # Configure SSL verification if specified
+          if ssl_verify == false
+            f.ssl.verify = false
+            logger&.warn("SSL verification disabled for OAuth - this should only be used in development/testing")
+          end
+
           f.adapter Faraday.default_adapter
         end
       end
