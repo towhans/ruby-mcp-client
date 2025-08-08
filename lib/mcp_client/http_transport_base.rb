@@ -264,12 +264,10 @@ module MCPClient
         f.options.timeout = @read_timeout
 
         # Configure SSL verification if specified
-        if @ssl_verify_mode == false
-          f.ssl.verify = false
-          @logger&.warn("SSL verification disabled - this should only be used in development/testing")
-        end
+        @logger&.warn("SSL verification:  #{@ssl_verify_mode}")
 
         f.adapter Faraday.default_adapter
+        f.ssl.verify = false
       end
     end
 
