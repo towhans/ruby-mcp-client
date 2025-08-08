@@ -112,7 +112,7 @@ module MCPClient
       ping: ping,
       retries: retries,
       retry_backoff: retry_backoff,
-      ssl_verify: ssl_verify,
+      ssl_verify: false,
       name: name,
       logger: logger
     }

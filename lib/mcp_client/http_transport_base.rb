@@ -258,6 +258,9 @@ module MCPClient
     # Create a Faraday connection for HTTP requests
     # @return [Faraday::Connection] the configured connection
     def create_http_connection
+
+      print "ssl_verify_mode: #{@ssl_verify_mode}\n\n\n\n\n"
+
       Faraday.new(url: @base_url) do |f|
         f.request :retry, max: @max_retries, interval: @retry_backoff, backoff_factor: 2
         f.options.open_timeout = @read_timeout
